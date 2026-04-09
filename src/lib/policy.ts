@@ -105,6 +105,11 @@ export interface CheckResult {
   matchedRule?: string;
 }
 
+export interface CheckResult {
+  result: PolicyResult;
+  matchedRule?: string;
+}
+
 export class PolicyEngine {
   constructor(private policy: Policy) {}
 
