@@ -100,11 +100,14 @@ function globToRegex(pattern: string): RegExp {
   return new RegExp(`^${escaped}$`);
 }
 
+<<<<<<< HEAD
 export interface CheckResult {
   result: PolicyResult;
   matchedRule?: string;
 }
 
+=======
+>>>>>>> bf5abe8 (fix: remove unused matchesAny function causing lint error)
 export interface CheckResult {
   result: PolicyResult;
   matchedRule?: string;
