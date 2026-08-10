@@ -143,6 +143,23 @@ export const AgentConfigSchema = z.object({
   skills: z.object({
     registry: SkillsRegistryConfigSchema.optional(),
   }).optional(),
+  modelRouter: z.object({
+    port: z.number().default(4000),
+    backends: z.record(z.object({
+      url: z.string(),
+      apiKey: z.string().optional(),
+      maxCtx: z.number().optional(),
+    })).optional(),
+    rules: z.array(z.object({
+      if: z.object({
+        promptTokens: z.object({ gt: z.number() }).optional(),
+        toolCount: z.object({ gt: z.number() }).optional(),
+        hasCode: z.boolean().optional(),
+        hasMath: z.boolean().optional(),
+      }).optional(),
+      use: z.union([z.string(), z.array(z.string())]),
+    })).optional(),
+  }).optional(),
 });
 
 // ── Provider registry ─────────────────────────────────────────────────────────
@@ -221,6 +238,7 @@ export type HttpServer = z.infer<typeof HttpServerSchema>;
 export type McpServer = z.infer<typeof McpServerSchema>;
 export type McpConfig = z.infer<typeof McpConfigSchema>;
 export type AgentConfig = z.infer<typeof AgentConfigSchema>;
+export type ModelRouter = z.infer<typeof AgentConfigSchema>["modelRouter"];
 export type Provider = z.infer<typeof ProviderSchema>;
 export type Providers = z.infer<typeof ProvidersSchema>;
 
@@ -320,6 +338,12 @@ export const PolicySchema = z.object({
      * Unscoped skills (no `allowed-tools`) become gate errors instead of warnings.
      */
     scopeRequired: z.boolean().default(false),
+    /**
+     * When false, unscoped skills are silently allowed (no warning or error).
+     * Useful when installing third-party skills that intentionally omit allowed-tools.
+     * Default: true (unscoped skills produce a warning).
+     */
+    warnUnscoped: z.boolean().default(true),
     /**
      * Skills with static hazard findings (curl-pipe-sh, eval-exec, etc.)
      * become gate errors instead of warnings.
