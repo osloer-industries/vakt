@@ -389,4 +389,28 @@ describe("syncSkills", () => {
     // target dir must NOT have been created
     expect(existsSync(dst)).toBe(false);
   });
+
+  it("skips system junk files like .DS_Store", () => {
+    mkdirSync(AGENTS, { recursive: true });
+    const src = join(AGENTS, "skills-src4");
+    const dst = join(AGENTS, "skills-dst4");
+    mkdirSync(join(src, "real-skill"), { recursive: true });
+    writeFileSync(join(src, ".DS_Store"), "junk");
+    writeFileSync(join(src, "Thumbs.db"), "junk");
+    writeFileSync(join(src, "desktop.ini"), "junk");
+    const result = syncSkills(src, dst, false);
+    expect(result.linked).toEqual(["real-skill"]);
+    expect(existsSync(join(dst, ".DS_Store"))).toBe(false);
+  });
+
+  it("skips hidden entries like dot directories", () => {
+    mkdirSync(AGENTS, { recursive: true });
+    const src = join(AGENTS, "skills-src5");
+    const dst = join(AGENTS, "skills-dst5");
+    mkdirSync(join(src, ".git"), { recursive: true });
+    mkdirSync(join(src, ".obsidian"), { recursive: true });
+    mkdirSync(join(src, "visible-skill"), { recursive: true });
+    const result = syncSkills(src, dst, false);
+    expect(result.linked).toEqual(["visible-skill"]);
+  });
 });
