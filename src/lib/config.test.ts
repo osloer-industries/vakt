@@ -128,4 +128,16 @@ describe("AgentConfigSchema runtime docker", () => {
     expect(result.success).toBe(true);
     expect(result.data?.runtime?.docker?.socket).toBe("/var/run/docker.sock");
   });
+
+  it("accepts sandbox runtime backends and coder config", () => {
+    const result = AgentConfigSchema.safeParse({
+      runtime: {
+        default: "local",
+        servers: { "my-server": "coder" },
+        coder: { url: "https://coder.example.com", org: "default" },
+      },
+    });
+    expect(result.success).toBe(true);
+    expect(result.data?.runtime?.servers?.["my-server"]).toBe("coder");
+  });
 });

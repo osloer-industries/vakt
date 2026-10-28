@@ -258,6 +258,10 @@ export const ProviderSchema = z
       path: z.union([z.string(), PlatformStringMapSchema]),
       method: z.enum(["symlink", "native"]),
     }),
+    instructions: z.object({
+      path: PlatformStringMapSchema,
+      method: z.enum(["symlink", "copy"]),
+    }).optional(),
     /**
      * Path to the provider's native permissions config file, keyed by platform.
      * When present and policy.tools is non-empty, vakt sync writes a managed
