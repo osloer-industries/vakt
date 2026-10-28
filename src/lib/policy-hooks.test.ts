@@ -253,7 +253,8 @@ describe("policy-hooks", () => {
 
       const content = readFileSync(result.path, "utf-8");
       expect(content).toContain("#!/bin/bash");
-      expect(content).toContain("echo");
+      expect(content).toContain("cat <<'HOOK_EOF'");
+      expect(content).toContain("[vakt policy]");
     });
 
     it("removes hook when policy has no tools", () => {
