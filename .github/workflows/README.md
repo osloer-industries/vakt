@@ -21,8 +21,8 @@ This directory contains GitHub Actions workflows for vakt.
 
 **Jobs:**
 
-- `test-macos` - Runs full test suite on macOS
-- `test-linux` - Runs full test suite on Linux
+- `test-macos` - Runs e2e on macOS **except** `tests/e2e/agent-docker.bats` (GitHub macOS runners have no Docker). Run `agent-docker.bats` locally with Docker Desktop or rely on `test-linux` / `ci.yml` `docker-e2e`.
+- `test-linux` - Full e2e suite on Linux, including Docker sandbox tests and a kind cluster for Kata kubectl checks
 - `lint` - Checks shell scripts, Python syntax, TODO comments
 - `security-check` - Checks for hardcoded secrets, file permissions
 

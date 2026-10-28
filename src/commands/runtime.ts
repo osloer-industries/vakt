@@ -3,6 +3,7 @@ import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { loadMcpConfig, loadAgentConfig, AGENTS_DIR } from "../lib/config";
 import { getRuntimeForServer } from "../lib/runtime";
+import { RUNTIME_BACKENDS } from "../lib/schemas";
 
 export function registerRuntime(program: Command): void {
   const runtime = program.command("runtime").description("Manage server runtime backends (local or cloud)");
@@ -22,14 +23,14 @@ export function registerRuntime(program: Command): void {
 
   runtime
     .command("set <server> <backend>")
-    .description("Set runtime for a server: local | e2b | docker")
+    .description(`Set runtime for a server: ${RUNTIME_BACKENDS.join(" | ")}`)
     .action((server: string, backend: string) => {
-      if (!["local", "e2b", "docker"].includes(backend)) {
-        console.error("Backend must be 'local', 'e2b', or 'docker'");
+      if (!(RUNTIME_BACKENDS as readonly string[]).includes(backend)) {
+        console.error(`Backend must be one of: ${RUNTIME_BACKENDS.join(", ")}`);
         process.exit(1);
       }
       const ac = loadAgentConfig();
-      if (!ac.runtime) (ac as any).runtime = { default: "local" };
+      if (!ac.runtime) ac.runtime = { default: "local" };
       if (!ac.runtime!.servers) ac.runtime!.servers = {};
       (ac.runtime!.servers as Record<string, string>)[server] = backend;
       writeFileSync(join(AGENTS_DIR, "config.json"), JSON.stringify(ac, null, 2) + "\n");

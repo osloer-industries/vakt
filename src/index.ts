@@ -20,6 +20,8 @@ import { registerLockdown } from "./commands/lockdown";
 import { registerWatch } from "./commands/watch";
 import { registerRegistry } from "./commands/registry";
 import { registerAgent } from "./commands/agent";
+import { registerPlanValidate } from "./commands/plan-validate";
+import { registerRoute } from "./commands/route";
 
 const program = new Command();
 program
@@ -46,5 +48,7 @@ registerLockdown(program);
 registerWatch(program);
 registerRegistry(program);
 registerAgent(program);
+registerPlanValidate(program);
+registerRoute(program);
 
 program.parse();

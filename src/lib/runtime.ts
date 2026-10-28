@@ -1,9 +1,12 @@
-import type { AgentConfig } from "./schemas";
+import type { AgentConfig, RuntimeBackend } from "./schemas";
+import { RuntimeBackendSchema } from "./schemas";
 
-export type RuntimeBackend = "local" | "e2b";
+export type { RuntimeBackend };
 
 export function getRuntimeForServer(name: string, config: AgentConfig): RuntimeBackend {
-  return (config.runtime?.servers?.[name] ?? config.runtime?.default ?? "local") as RuntimeBackend;
+  const backend = config.runtime?.servers?.[name] ?? config.runtime?.default ?? "local";
+  const parsed = RuntimeBackendSchema.safeParse(backend);
+  return parsed.success ? parsed.data : "local";
 }
 
 // E2B cloud sandbox helpers (resolvedE2BApiKey, startServerInE2B, stopSandbox)
