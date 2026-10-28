@@ -112,6 +112,21 @@ export type SkillsIndexEntry = z.infer<typeof SkillsIndexEntrySchema>;
 
 // ── Agent config ─────────────────────────────────────────────────────────────
 
+export const RUNTIME_BACKENDS = [
+  "local",
+  "e2b",
+  "docker",
+  "coder",
+  "daytona",
+  "fly",
+  "gvisor",
+  "kata",
+  "microsandbox",
+] as const;
+
+export const RuntimeBackendSchema = z.enum(RUNTIME_BACKENDS);
+export type RuntimeBackend = z.infer<typeof RuntimeBackendSchema>;
+
 export const AgentConfigSchema = z.object({
   paths: z.record(z.string()).default({
     code: "~/Code",
@@ -125,10 +140,10 @@ export const AgentConfigSchema = z.object({
     enabled:  z.boolean().default(true),
   }).optional(),
   runtime: z.object({
-    default: z.enum(["local", "e2b", "docker"]).default("local"),
-    servers: z.record(z.string(), z.enum(["local", "e2b", "docker"])).optional(),
+    default: RuntimeBackendSchema.default("local"),
+    servers: z.record(z.string(), RuntimeBackendSchema).optional(),
     e2b: z.object({
-      api_key:  z.string(),
+      api_key:  z.string().optional(),
       template: z.string().optional(),
     }).optional(),
     docker: z.object({
@@ -138,10 +153,60 @@ export const AgentConfigSchema = z.object({
       cpus:    z.string().optional(),
       network: z.enum(["none", "bridge"]).default("none"),
     }).optional(),
+    coder: z.object({
+      url: z.string().optional(),
+      token: z.string().optional(),
+      org: z.string().optional(),
+      template: z.string().optional(),
+      stop_after_session: z.boolean().optional(),
+    }).optional(),
+    daytona: z.object({
+      api_url: z.string().optional(),
+      api_key: z.string().optional(),
+      image: z.string().optional(),
+    }).optional(),
+    fly: z.object({
+      api_token: z.string().optional(),
+      app: z.string().optional(),
+      region: z.string().optional(),
+    }).optional(),
+    gvisor: z.object({
+      backend: z.string().optional(),
+      runtime_class: z.string().optional(),
+      project: z.string().optional(),
+    }).optional(),
+    kata: z.object({
+      kubeconfig: z.string().optional(),
+      namespace: z.string().optional(),
+      runtime_class: z.string().optional(),
+    }).optional(),
+    microsandbox: z.object({
+      api_url: z.string().optional(),
+      rootfs: z.string().optional(),
+      cpus: z.number().optional(),
+      mem_mb: z.number().optional(),
+    }).optional(),
   }).optional(),
   remote: RemoteConfigSchema.optional(),
   skills: z.object({
     registry: SkillsRegistryConfigSchema.optional(),
+  }).optional(),
+  modelRouter: z.object({
+    port: z.number().default(4000),
+    backends: z.record(z.object({
+      url: z.string(),
+      apiKey: z.string().optional(),
+      maxCtx: z.number().optional(),
+    })).optional(),
+    rules: z.array(z.object({
+      if: z.object({
+        promptTokens: z.object({ gt: z.number() }).optional(),
+        toolCount: z.object({ gt: z.number() }).optional(),
+        hasCode: z.boolean().optional(),
+        hasMath: z.boolean().optional(),
+      }).optional(),
+      use: z.union([z.string(), z.array(z.string())]),
+    })).optional(),
   }).optional(),
 });
 
@@ -221,6 +286,7 @@ export type HttpServer = z.infer<typeof HttpServerSchema>;
 export type McpServer = z.infer<typeof McpServerSchema>;
 export type McpConfig = z.infer<typeof McpConfigSchema>;
 export type AgentConfig = z.infer<typeof AgentConfigSchema>;
+export type ModelRouter = z.infer<typeof AgentConfigSchema>["modelRouter"];
 export type Provider = z.infer<typeof ProviderSchema>;
 export type Providers = z.infer<typeof ProvidersSchema>;
 
@@ -320,6 +386,12 @@ export const PolicySchema = z.object({
      * Unscoped skills (no `allowed-tools`) become gate errors instead of warnings.
      */
     scopeRequired: z.boolean().default(false),
+    /**
+     * When false, unscoped skills are silently allowed (no warning or error).
+     * Useful when installing third-party skills that intentionally omit allowed-tools.
+     * Default: true (unscoped skills produce a warning).
+     */
+    warnUnscoped: z.boolean().default(true),
     /**
      * Skills with static hazard findings (curl-pipe-sh, eval-exec, etc.)
      * become gate errors instead of warnings.

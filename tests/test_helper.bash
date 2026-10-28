@@ -7,6 +7,10 @@ VAKT="${PROJECT_ROOT}/src/vakt.sh"
 setup_test_env() {
   # Full HOME sandbox — no real ~/.claude, ~/.cursor, etc. can leak in
   export SANDBOX_HOME="$(mktemp -d)"
+  # Preserve cluster access for Kata e2e: kubectl reads KUBECONFIG, not vakt config.
+  if [[ -z "${KUBECONFIG:-}" && -f "${HOME}/.kube/config" ]]; then
+    export KUBECONFIG="${HOME}/.kube/config"
+  fi
   export HOME="$SANDBOX_HOME"
   export AGENTS_DIR="$SANDBOX_HOME/.agents"
   export AGENTS_SECRETS_BACKEND="env"  # never trigger macOS keychain dialogs in tests
@@ -100,6 +104,17 @@ skip_if_missing() {
   if ! command -v "$cmd" &>/dev/null; then
     skip "$cmd not installed"
   fi
+
+  # Special handling for docker: check daemon is responsive (with timeout)
+  if [[ "$cmd" == "docker" ]]; then
+    if ! timeout 5 docker info &>/dev/null; then
+      skip "docker daemon not running or not responsive"
+    fi
+  fi
+}
+
+docker_with_timeout() {
+  timeout 10 docker "$@"
 }
 
 wait_for_file() {
