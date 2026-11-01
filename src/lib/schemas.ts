@@ -28,7 +28,7 @@ const PlatformStringArrayMapSchema = z.object({
 export const StdioServerSchema = z.object({
   command: z.string(),
   args: z.array(z.string()).optional(),
-  env: z.record(z.string()).optional(),
+  env: z.record(z.string(), z.string()).optional(),
   cwd: z.string().optional(),
   global: z.boolean().default(false),
 });
@@ -36,7 +36,7 @@ export const StdioServerSchema = z.object({
 export const HttpServerSchema = z.object({
   transport: z.literal("http"),
   url: z.string().url(),
-  headers: z.record(z.string()).optional(),
+  headers: z.record(z.string(), z.string()).optional(),
   global: z.boolean().default(false),
 });
 
@@ -51,7 +51,7 @@ export const McpConfigSchema = z.preprocess(
     }
     return input;
   },
-  z.record(McpServerSchema)
+  z.record(z.string(), McpServerSchema)
 );
 
 // ── Raw provider config files ─────────────────────────────────────────────────
@@ -64,13 +64,13 @@ export const RawProviderServerSchema = z
     // Stdio fields
     command: z.union([z.string(), z.array(z.string())]).optional(),
     args: z.array(z.string()).optional(),
-    env: z.record(z.string()).optional(),
+    env: z.record(z.string(), z.string()).optional(),
     cwd: z.string().optional(),
     // HTTP fields — various provider conventions
     url: z.string().optional(),
     httpUrl: z.string().optional(),
     serverUrl: z.string().optional(),
-    headers: z.record(z.string()).optional(),
+    headers: z.record(z.string(), z.string()).optional(),
     // Type discriminator used by some providers (e.g. "http", "local", "remote")
     type: z.string().optional(),
   })
@@ -128,7 +128,7 @@ export const RuntimeBackendSchema = z.enum(RUNTIME_BACKENDS);
 export type RuntimeBackend = z.infer<typeof RuntimeBackendSchema>;
 
 export const AgentConfigSchema = z.object({
-  paths: z.record(z.string()).default({
+  paths: z.record(z.string(), z.string()).default({
     code: "~/Code",
     documents: "~/Documents",
     vault: "~/Documents/vault",
@@ -193,11 +193,14 @@ export const AgentConfigSchema = z.object({
   }).optional(),
   modelRouter: z.object({
     port: z.number().default(4000),
-    backends: z.record(z.object({
-      url: z.string(),
-      apiKey: z.string().optional(),
-      maxCtx: z.number().optional(),
-    })).optional(),
+    backends: z.record(
+      z.string(),
+      z.object({
+        url: z.string(),
+        apiKey: z.string().optional(),
+        maxCtx: z.number().optional(),
+      }),
+    ).optional(),
     rules: z.array(z.object({
       if: z.object({
         promptTokens: z.object({ gt: z.number() }).optional(),
@@ -279,7 +282,7 @@ export const ProviderSchema = z
     { message: "permissionsPath and permissionsFormat must both be set or both be absent" }
   );
 
-export const ProvidersSchema = z.record(ProviderSchema);
+export const ProvidersSchema = z.record(z.string(), ProviderSchema);
 
 export type StdioServer = z.infer<typeof StdioServerSchema>;
 export type HttpServer = z.infer<typeof HttpServerSchema>;
