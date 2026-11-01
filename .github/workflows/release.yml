@@ -28,7 +28,7 @@ jobs:
       released: ${{ steps.tag-check.outputs.released }}
       version: ${{ steps.tag-check.outputs.version }}
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v6
         with:
           fetch-depth: 0
           persist-credentials: false
@@ -113,7 +113,7 @@ jobs:
     needs: release
     if: needs.release.outputs.released == 'true'
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v6
         with:
           ref: v${{ needs.release.outputs.version }}
 
@@ -144,7 +144,7 @@ jobs:
     needs: [release, release-macos]
     if: needs.release.outputs.released == 'true'
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v6
         with:
           # Check out main so the formula commit is based on the current branch
           # tip. Pushing directly from a detached tag fails GH006 (status checks
