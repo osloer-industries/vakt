@@ -95,64 +95,49 @@ function updateAgentsMd(agentsMdPath: string, policyContext: string, dryRun: boo
   return { written: true, path: agentsMdPath, action: existed ? "updated" : "created" };
 }
 
-export function syncOpenCodeAgentsMd(policy: Policy | null, dryRun: boolean): HookResult {
+function removeVaktBlockFromAgentsMd(agentsMdPath: string, dryRun: boolean): HookResult {
+  if (!existsSync(agentsMdPath)) {
+    return { written: false, path: agentsMdPath, action: "skipped" };
+  }
+  const content = readFileSync(agentsMdPath, "utf-8");
+  const markerRegex = new RegExp(
+    `${VAKT_MARKER_START}[\\s\\S]*?${VAKT_MARKER_END}\\n?`,
+    "g"
+  );
+  if (!markerRegex.test(content)) {
+    return { written: false, path: agentsMdPath, action: "skipped" };
+  }
+  if (dryRun) return { written: false, path: agentsMdPath, action: "dry-run" };
+  const newContent = content.replace(markerRegex, "").trim();
+  if (newContent) {
+    writeFileSync(agentsMdPath, newContent + "\n", "utf-8");
+  } else {
+    unlinkSync(agentsMdPath);
+  }
+  return { written: true, path: agentsMdPath, action: "removed" };
+}
+
+function syncAgentsMdAtPath(
+  agentsMdPath: string,
+  policy: Policy | null,
+  dryRun: boolean,
+): HookResult {
   const allow = policy?.tools?.allow ?? [];
   const deny = policy?.tools?.deny ?? [];
-  const agentsMdPath = expandHome("~/.config/opencode/AGENTS.md");
-  
+
   if (allow.length + deny.length === 0) {
-    if (!existsSync(agentsMdPath)) {
-      return { written: false, path: agentsMdPath, action: "skipped" };
-    }
-    const content = readFileSync(agentsMdPath, "utf-8");
-    const markerRegex = new RegExp(
-      `${VAKT_MARKER_START}[\\s\\S]*?${VAKT_MARKER_END}\\n?`,
-      "g"
-    );
-    if (!markerRegex.test(content)) {
-      return { written: false, path: agentsMdPath, action: "skipped" };
-    }
-    if (dryRun) return { written: false, path: agentsMdPath, action: "dry-run" };
-    const newContent = content.replace(markerRegex, "").trim();
-    if (newContent) {
-      writeFileSync(agentsMdPath, newContent + "\n", "utf-8");
-    } else {
-      unlinkSync(agentsMdPath);
-    }
-    return { written: true, path: agentsMdPath, action: "removed" };
+    return removeVaktBlockFromAgentsMd(agentsMdPath, dryRun);
   }
-  
+
   return updateAgentsMd(agentsMdPath, formatPolicyContext(allow, deny), dryRun);
 }
 
+export function syncOpenCodeAgentsMd(policy: Policy | null, dryRun: boolean): HookResult {
+  return syncAgentsMdAtPath(expandHome("~/.config/opencode/AGENTS.md"), policy, dryRun);
+}
+
 export function syncMistralAgentsMd(policy: Policy | null, dryRun: boolean): HookResult {
-  const allow = policy?.tools?.allow ?? [];
-  const deny = policy?.tools?.deny ?? [];
-  const agentsMdPath = expandHome("~/.vibe/AGENTS.md");
-  
-  if (allow.length + deny.length === 0) {
-    if (!existsSync(agentsMdPath)) {
-      return { written: false, path: agentsMdPath, action: "skipped" };
-    }
-    const content = readFileSync(agentsMdPath, "utf-8");
-    const markerRegex = new RegExp(
-      `${VAKT_MARKER_START}[\\s\\S]*?${VAKT_MARKER_END}\\n?`,
-      "g"
-    );
-    if (!markerRegex.test(content)) {
-      return { written: false, path: agentsMdPath, action: "skipped" };
-    }
-    if (dryRun) return { written: false, path: agentsMdPath, action: "dry-run" };
-    const newContent = content.replace(markerRegex, "").trim();
-    if (newContent) {
-      writeFileSync(agentsMdPath, newContent + "\n", "utf-8");
-    } else {
-      unlinkSync(agentsMdPath);
-    }
-    return { written: true, path: agentsMdPath, action: "removed" };
-  }
-  
-  return updateAgentsMd(agentsMdPath, formatPolicyContext(allow, deny), dryRun);
+  return syncAgentsMdAtPath(expandHome("~/.vibe/AGENTS.md"), policy, dryRun);
 }
 
 // ── Hook-capable providers: Hook scripts ─────────────────────────────────────
@@ -194,7 +179,18 @@ function getHookPaths(provider: "claude" | "gemini" | "codex" | "windsurf"): Hoo
   }
 }
 
+/** Escape policy text for embedding as a JSON string literal (no shell interpolation). */
+function escapeJsonString(value: string): string {
+  return value
+    .replace(/\\/g, "\\\\")
+    .replace(/"/g, '\\"')
+    .replace(/\n/g, "\\n")
+    .replace(/\r/g, "\\r")
+    .replace(/\t/g, "\\t");
+}
+
 function generateHookScript(policyContext: string): string {
+  const jsonContext = escapeJsonString(policyContext);
   return `#!/bin/bash
 # ${VAKT_MARKER_START}
 # This hook injects vakt policy context into agent prompts
@@ -203,7 +199,7 @@ function generateHookScript(policyContext: string): string {
 cat <<'HOOK_EOF'
 {
   "hookSpecificOutput": {
-    "additionalContext": "${policyContext.replace(/"/g, '\\"').replace(/\n/g, '\\n')}"
+    "additionalContext": "${jsonContext}"
   }
 }
 HOOK_EOF
@@ -211,12 +207,15 @@ HOOK_EOF
 }
 
 function generateWindsurfHookScript(policyContext: string): string {
+  const jsonContext = escapeJsonString(policyContext);
   return `#!/bin/bash
 # ${VAKT_MARKER_START}
 # This hook injects vakt policy context into agent prompts
 # Generated by vakt sync — do not edit manually
 
-echo "${policyContext.replace(/"/g, '\\"').replace(/\n/g, '\\n')}"
+cat <<'HOOK_EOF'
+${jsonContext}
+HOOK_EOF
 `;
 }
 
