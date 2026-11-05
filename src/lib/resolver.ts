@@ -223,6 +223,14 @@ export async function writeTomlConfig(
   }
 }
 
+/** System junk / metadata files that must never be treated as skills. */
+const SYSTEM_FILES = new Set(["Thumbs.db", "desktop.ini"]);
+
+/** True for entries that should never be synced as skills: system junk, hidden files, dot-dirs. */
+export function isIgnoredSkillEntry(entry: string): boolean {
+  return entry.startsWith(".") || SYSTEM_FILES.has(entry);
+}
+
 export function syncSkills(
   skillsSource: string,
   skillsTarget: string,
@@ -236,7 +244,8 @@ export function syncSkills(
   if (!existsSync(skillsSource)) return { linked, skipped, errors };
   if (!dryRun) mkdirSync(skillsTarget, { recursive: true });
 
-  for (const entry of readdirSync(skillsSource)) {
+  const entries = readdirSync(skillsSource).filter(e => !isIgnoredSkillEntry(e));
+  for (const entry of entries) {
     const dest = join(skillsTarget, entry);
     const src = join(skillsSource, entry);
     if (globalOnly && !isSkillGlobal(src)) continue;
