@@ -1,11 +1,27 @@
 version: 2
 updates:
+  # Bun (package.json + bun.lock)
+  - package-ecosystem: "bun"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
+      - "bun"
+    commit-message:
+      prefix: "chore(deps)"
+      include: "scope"
+    groups:
+      bun-dependencies:
+        patterns:
+          - "*"
+
   # GitHub Actions
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
       interval: "weekly"
-    target-branch: "develop"
     open-pull-requests-limit: 5
     labels:
       - "dependencies"
