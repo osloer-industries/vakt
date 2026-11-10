@@ -73,7 +73,10 @@ jobs:
 
       - name: Capture tag before release
         id: before-release
-        run: echo "tag=$(git tag --sort=-version:refname | head -1)" >> $GITHUB_OUTPUT
+        run: |
+          set -euo pipefail
+          tag="$(git tag --sort=-version:refname | head -1)"
+          echo "tag=${tag}" >> "$GITHUB_OUTPUT"
 
       - name: Configure git for semantic-release
         run: git remote set-url origin https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git
@@ -98,14 +101,15 @@ jobs:
         id: tag-check
         if: github.event.inputs.dry_run != 'true'
         run: |
+          set -euo pipefail
           git fetch --tags
-          AFTER=$(git tag --sort=-version:refname | head -1)
+          AFTER="$(git tag --sort=-version:refname | head -1)"
           BEFORE="${{ steps.before-release.outputs.tag }}"
           if [ "$BEFORE" != "$AFTER" ]; then
-            echo "released=true" >> $GITHUB_OUTPUT
-            echo "version=${AFTER#v}" >> $GITHUB_OUTPUT
+            echo "released=true" >> "$GITHUB_OUTPUT"
+            echo "version=${AFTER#v}" >> "$GITHUB_OUTPUT"
           else
-            echo "released=false" >> $GITHUB_OUTPUT
+            echo "released=false" >> "$GITHUB_OUTPUT"
           fi
 
   release-macos:
@@ -161,8 +165,9 @@ jobs:
           set -euo pipefail
           gh release download "v${VERSION}" --pattern "checksums-darwin.txt" --pattern "checksums.txt" --dir /tmp/checksums
 
-          export SHA_DARWIN_ARM64=$(grep "darwin-arm64" /tmp/checksums/checksums-darwin.txt | awk '{print $1}')
-          export SHA_LINUX_X86_64=$(grep "linux-x86_64" /tmp/checksums/checksums.txt | awk '{print $1}')
+          SHA_DARWIN_ARM64="$(grep "darwin-arm64" /tmp/checksums/checksums-darwin.txt | awk '{print $1}')"
+          SHA_LINUX_X86_64="$(grep "linux-x86_64" /tmp/checksums/checksums.txt | awk '{print $1}')"
+          export SHA_DARWIN_ARM64 SHA_LINUX_X86_64
 
           python3 scripts/update-formula.py
 
@@ -186,4 +191,6 @@ jobs:
             --base main \
             --head "$BRANCH"
           # Requires 'Allow auto-merge' enabled in repo Settings → General → Pull Requests.
-          gh pr merge "$BRANCH" --squash --auto --delete-branch || true
+          if ! gh pr merge "$BRANCH" --squash --auto --delete-branch; then
+            echo "Formula PR remains open (auto-merge disabled or checks pending)."
+          fi

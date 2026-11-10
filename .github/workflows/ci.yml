@@ -35,21 +35,27 @@ jobs:
 
       - name: Validate JSON files
         run: |
-          for file in $(find . -name "*.json" -not -path "*/node_modules/*" -type f); do
-            python3 -m json.tool "$file" > /dev/null || (echo "Invalid JSON: $file" && exit 1)
-          done
+          set -euo pipefail
+          find . -name "*.json" -not -path "*/node_modules/*" -type f -print0 |
+            while IFS= read -r -d '' file; do
+              python3 -m json.tool "$file" > /dev/null
+            done
 
       - name: Validate workflow YAML
         run: |
-          for file in $(find .github/workflows -name "*.yml" -type f); do
-            python3 -c "import yaml, sys; yaml.safe_load(open('$file'))" || (echo "Invalid YAML: $file" && exit 1)
-          done
+          set -euo pipefail
+          find .github/workflows -name "*.yml" -type f -print0 |
+            while IFS= read -r -d '' file; do
+              python3 -c 'import yaml, sys; yaml.safe_load(open(sys.argv[1]))' "$file"
+            done
 
       - name: Validate shell scripts syntax
         run: |
-          for file in $(find . -name "*.sh" -not -path "*/node_modules/*" -type f); do
-            bash -n "$file" || (echo "Syntax error in: $file" && exit 1)
-          done
+          set -euo pipefail
+          find . -name "*.sh" -not -path "*/node_modules/*" -type f -print0 |
+            while IFS= read -r -d '' file; do
+              bash -n "$file"
+            done
 
       - name: Check skill files
         run: |

@@ -25,9 +25,11 @@ jobs:
       # (test-linux below and CI docker-e2e in ci.yml).
       - name: Run e2e tests (excluding Docker sandbox suite)
         run: |
+          set -euo pipefail
           export PATH="$PWD/src:$HOME/.bun/bin:$PATH"
           export AGENTS_SECRETS_BACKEND=env
-          bats $(find tests/e2e -maxdepth 1 -name '*.bats' ! -name 'agent-docker.bats' | sort)
+          mapfile -t bats_files < <(find tests/e2e -maxdepth 1 -name '*.bats' ! -name 'agent-docker.bats' | sort)
+          bats "${bats_files[@]}"
 
       - name: Build binary (smoke test prerequisite)
         run: bun build src/index.ts --compile --outfile dist/vakt
