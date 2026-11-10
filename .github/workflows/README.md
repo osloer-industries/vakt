@@ -2,18 +2,42 @@
 
 This directory contains GitHub Actions workflows for vakt.
 
+Org-wide gates (actionlint, zizmor, CodeQL init/analyze, dependency review) call reusable workflows from [`osloer-industries/.github`](https://github.com/osloer-industries/.github) at an immutable commit SHA. Bump those refs via Dependabot `ci(deps)` pull requests. See `docs/consuming-workflows.md` in that repository.
+
+**Pinned reusables SHA:** `d4865a4b2c70c8433188f5200beac104b1c7fe86` (`main` at merge of org workflow-security, CodeQL SARIF gate, and cross-repo validator fixes).
+
 ## Workflows
 
 ### 1. CI (`ci.yml`)
 
-**Triggers:** Push to main, Pull Requests to main
+**Triggers:** Push to main, pull requests
 
 **Jobs:**
 
-- `validate` - Validates JSON, shell syntax, skill files, required files
-- `dependency-review` - Checks dependencies on PRs (optional)
+- `workflow-security` — org reusable: actionlint + zizmor on `.github/` (strict default thresholds)
+- `build` — TypeScript check, JSON/YAML/shell validation, skill layout, CLI/installer smoke
+- `sonarcloud` — Bun unit coverage + SonarCloud upload
+- `docker-e2e` — Docker Compose security harness (`tests/docker/`)
 
-**Purpose:** Continuous integration checks on every PR and push.
+**Purpose:** Continuous integration and repo-specific quality gates on every PR and push.
+
+### 1b. CodeQL (`codeql.yml`)
+
+**Triggers:** Pull requests, push to `main`, weekly schedule (Monday 03:17 UTC)
+
+**Jobs:**
+
+- `analyze` — org reusable `codeql-javascript-typescript.yml` (public repo: default Code Scanning upload)
+
+Local config: `.github/codeql/codeql-config.yml` limits analysis to `javascript-typescript` (workflow Actions are SHA-pinned and not analysed as Actions language).
+
+### 1c. Dependency review (`dependency-review.yml`)
+
+**Triggers:** Pull requests only
+
+**Jobs:**
+
+- `review` — org reusable `dependency-review.yml` (fails on `high` severity by default)
 
 ### 2. Tests (`test.yml`)
 
@@ -151,5 +175,4 @@ View workflow runs:
 ### Security check false positives
 
 - Review flagged patterns
-- Update grep patterns in security-check job
-- Use `continue-on-error: true` if needed
+- Update grep patterns in the `security` job in `test.yml`
