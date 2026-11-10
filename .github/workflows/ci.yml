@@ -1,4 +1,5 @@
 name: CI
+
 permissions:
   contents: read
 
@@ -7,7 +8,17 @@ on:
     branches: [main]
   pull_request:
 
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
+  workflow-security:
+    uses: osloer-industries/.github/.github/workflows/workflow-security.yml@d4865a4b2c70c8433188f5200beac104b1c7fe86 # main
+    permissions:
+      contents: read
+      actions: read
+
   build:
     runs-on: ubuntu-latest
     steps:
@@ -58,15 +69,6 @@ jobs:
           grep -q "#!/usr/bin/env bash" install.sh
           grep -q "curl" install.sh || grep -q "git clone" install.sh
 
-  dependency-review:
-    runs-on: ubuntu-latest
-    if: github.event_name == 'pull_request'
-    steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
-      - name: Dependency Review
-        uses: actions/dependency-review-action@2031cfc080254a8a887f58cffee85186f0e49e48 # v4
-        continue-on-error: true
-
   sonarcloud:
     runs-on: ubuntu-latest
     steps:
@@ -84,7 +86,7 @@ jobs:
         run: bun test --coverage --coverage-reporter lcov
 
       - name: SonarCloud Scan
-        uses: SonarSource/sonarcloud-github-action@v5
+        uses: SonarSource/sonarcloud-github-action@ffc3010689be73b8e5ae0c57ce35968afd7909e8 # v5
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}

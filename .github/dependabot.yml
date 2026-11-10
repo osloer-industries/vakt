@@ -17,7 +17,7 @@ updates:
         patterns:
           - "*"
 
-  # GitHub Actions
+  # GitHub Actions (including uses: osloer-industries/.github/.github/workflows/...@<sha> reusable refs)
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
