@@ -28,7 +28,10 @@ jobs:
           set -euo pipefail
           export PATH="$PWD/src:$HOME/.bun/bin:$PATH"
           export AGENTS_SECRETS_BACKEND=env
-          mapfile -t bats_files < <(find tests/e2e -maxdepth 1 -name '*.bats' ! -name 'agent-docker.bats' | sort)
+          bats_files=()
+          while IFS= read -r file; do
+            bats_files+=("$file")
+          done < <(find tests/e2e -maxdepth 1 -name '*.bats' ! -name 'agent-docker.bats' | sort)
           bats "${bats_files[@]}"
 
       - name: Build binary (smoke test prerequisite)

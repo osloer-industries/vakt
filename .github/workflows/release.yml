@@ -16,11 +16,13 @@ on:
       - main
 
 permissions:
-  contents: write
-  pull-requests: write
+  contents: read
 
 jobs:
   release:
+    permissions:
+      contents: write
+      pull-requests: write
     runs-on: ubuntu-latest
     # Only run on main branch push or manual dispatch
     if: github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch'
@@ -113,6 +115,8 @@ jobs:
           fi
 
   release-macos:
+    permissions:
+      contents: write
     runs-on: macos-latest
     needs: release
     if: needs.release.outputs.released == 'true'
@@ -144,6 +148,9 @@ jobs:
             "checksums-darwin.txt"
 
   release-homebrew:
+    permissions:
+      contents: write
+      pull-requests: write
     runs-on: ubuntu-latest
     needs: [release, release-macos]
     if: needs.release.outputs.released == 'true'
