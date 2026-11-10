@@ -30,7 +30,7 @@ jobs:
       released: ${{ steps.tag-check.outputs.released }}
       version: ${{ steps.tag-check.outputs.version }}
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           fetch-depth: 0
           persist-credentials: false
@@ -39,7 +39,7 @@ jobs:
         run: git fetch --tags --force
 
       - name: Setup Bun
-        uses: oven-sh/setup-bun@ecf28ddc73e819eb6fa29df6b34ef8921c743461 # v2
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
 
       - name: Install dependencies
         run: bun install --frozen-lockfile
@@ -121,12 +121,13 @@ jobs:
     needs: release
     if: needs.release.outputs.released == 'true'
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           ref: v${{ needs.release.outputs.version }}
+          persist-credentials: false
 
       - name: Setup Bun
-        uses: oven-sh/setup-bun@ecf28ddc73e819eb6fa29df6b34ef8921c743461 # v2
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
 
       - name: Install dependencies
         run: bun install --frozen-lockfile
@@ -155,13 +156,14 @@ jobs:
     needs: [release, release-macos]
     if: needs.release.outputs.released == 'true'
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           # Check out main so the formula commit is based on the current branch
           # tip. Pushing directly from a detached tag fails GH006 (status checks
           # not yet run for that commit SHA). PR + auto-merge is the safe path.
           ref: main
           fetch-depth: 0
+          persist-credentials: false
           token: ${{ secrets.RELEASE_PAT }}
 
       - name: Compute SHAs and update formula
