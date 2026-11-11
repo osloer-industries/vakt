@@ -1,6 +1,6 @@
 import { existsSync, readFileSync, realpathSync, statSync } from "node:fs";
 import { basename, resolve } from "node:path";
-import { homedir } from "node:os";
+import { homedir, tmpdir } from "node:os";
 
 /** Strip control characters for safe terminal/log output (log injection). */
 export function sanitizeForLog(value: string): string {
@@ -43,7 +43,7 @@ export function ensureUnderAllowedRoots(resolvedPath: string, allowedRoots: read
 }
 
 export function defaultUserPathRoots(agentsDir: string): string[] {
-  return [process.cwd(), agentsDir, homedir()];
+  return [process.cwd(), agentsDir, homedir(), tmpdir()];
 }
 
 /** Resolve a user-supplied file path to an absolute, existing regular file under allowed roots. */
@@ -100,6 +100,8 @@ export function assertSafeSkillName(name: string): string {
 }
 
 export { assertGitRemoteUrl } from "./safe-input-git";
+import { assertDockerImageRef } from "./safe-input-oci";
+
 export {
   assertDockerImageRef,
   assertOciReference,
@@ -146,9 +148,59 @@ export function validateDockerApiPath(path: string): void {
 /** Build a validated Docker exec start API path from an engine exec id. */
 export function buildDockerExecStartPath(execId: string): string {
   assertDockerResourceId(execId);
-  const path = `/exec/${execId}/start`;
-  validateDockerApiPath(path);
-  return path;
+  return rebuildDockerApiPath(`/exec/${execId.toLowerCase()}/start`);
+}
+
+function sanitizeDockerImageCreateQuery(query: string): string {
+  const params = new URLSearchParams(query);
+  const img = params.get("fromImage");
+  if (!img) {
+    throw new Error("Invalid Docker API path");
+  }
+  const decoded = decodeURIComponent(img);
+  assertDockerImageRef(decoded);
+  return `?${new URLSearchParams({ fromImage: decoded }).toString()}`;
+}
+
+/**
+ * Rebuild a Docker Engine API path from validated segments (breaks taint for fetch URLs).
+ */
+export function rebuildDockerApiPath(path: string): string {
+  const qIndex = path.indexOf("?");
+  const pathname = qIndex >= 0 ? path.slice(0, qIndex) : path;
+  validateDockerApiPath(pathname);
+  const segments = pathname.split("/").filter(Boolean);
+  const rebuilt: string[] = [];
+  for (let i = 0; i < segments.length; i++) {
+    const seg = segments[i]!;
+    const parent = segments[i - 1];
+    let safe = seg;
+    if (parent === "containers" && !DOCKER_PATH_LITERALS.has(seg)) {
+      assertDockerResourceId(seg);
+      safe = seg.toLowerCase();
+    } else if (parent === "exec" && seg !== "start") {
+      assertDockerResourceId(seg);
+      safe = seg.toLowerCase();
+    }
+    rebuilt.push(safe);
+  }
+  let out = `/${rebuilt.join("/")}`;
+  if (qIndex >= 0) {
+    const query = path.slice(qIndex + 1);
+    if (pathname === "/images/create") {
+      out += sanitizeDockerImageCreateQuery(query);
+    } else if (query === "force=true") {
+      out += "?force=true";
+    } else if (pathname === "/containers/json" && query.startsWith("filters=")) {
+      if (query.includes("..") || query.includes("\0")) {
+        throw new Error("Invalid Docker API path");
+      }
+      out += `?${query}`;
+    } else {
+      throw new Error("Invalid Docker API path");
+    }
+  }
+  return out;
 }
 
 const NPM_PKG = /^(?:@[\w.-]+\/)?[\w.-]+$/;

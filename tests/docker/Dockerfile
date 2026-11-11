@@ -6,7 +6,7 @@ ARG BUN_SHA256=f57bc0187e39623de716ba3a389fda5486b2d7be7131a980ba54dc7b733d2e08
 
 # ── System dependencies ───────────────────────────────────────────────────────
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    ca-certificates gnupg2 pass bats jq git unzip \
+    curl ca-certificates gnupg2 pass bats jq git unzip \
     nodejs npm \
     && rm -rf /var/lib/apt/lists/*
 

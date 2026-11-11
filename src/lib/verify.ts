@@ -1,6 +1,6 @@
-import { spawnSync } from "node:child_process";
-import { assertNpmPackageName, validatedOciReference } from "./safe-input";
-import { requireExecutable, safeSpawnEnv } from "./safe-exec";
+import { assertNpmPackageName } from "./safe-input";
+import { requireExecutable } from "./safe-exec";
+import { runCosignVerify } from "./verify-cosign";
 
 export type VerifyResult =
   | { ok: true; signer: string; source: string }
@@ -21,18 +21,12 @@ export function verifyOci(identifier: string): VerifyResult {
   if (!cmdAvailable("cosign")) {
     return { ok: false, reason: "cosign not installed (brew install cosign)" };
   }
-  let safeRef: string;
+  let r: ReturnType<typeof runCosignVerify>;
   try {
-    safeRef = validatedOciReference(identifier);
+    r = runCosignVerify(identifier);
   } catch (e) {
     return { ok: false, reason: e instanceof Error ? e.message : String(e) };
   }
-
-  const cosign = requireExecutable("cosign");
-  const r = spawnSync(cosign, ["verify", safeRef], {
-    encoding: "utf-8",
-    env: safeSpawnEnv(),
-  });
   if (r.status === 0) {
     let signer = "verified";
     try {

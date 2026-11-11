@@ -5,7 +5,7 @@ import {
   assertDockerImageRef,
   assertDockerResourceId,
   buildDockerExecStartPath,
-  validateDockerApiPath,
+  rebuildDockerApiPath,
 } from "../safe-input";
 
 interface DockerOpts {
@@ -54,8 +54,8 @@ export class DockerSandboxProvider implements SandboxProvider {
   }
 
   private async dockerFetch(path: string, init: RequestInit): Promise<Response> {
-    validateDockerApiPath(path.split("?")[0] ?? path);
-    return fetch(this.url(path), {
+    const safePath = rebuildDockerApiPath(path);
+    return fetch(this.url(safePath), {
       ...init,
       // @ts-ignore — Bun extension: unix socket fetch
       unix: this.socket,
@@ -79,7 +79,6 @@ export class DockerSandboxProvider implements SandboxProvider {
   private async pullImage(image: string): Promise<void> {
     assertDockerImageRef(image);
     const apiPath = `/images/create?fromImage=${encodeURIComponent(image)}`;
-    validateDockerApiPath(apiPath.split("?")[0]!);
     const res = await this.dockerFetch(apiPath, { method: "POST" });
     if (!res.ok) {
       const text = await res.text().catch(() => "");
