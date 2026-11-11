@@ -1,0 +1,20 @@
+name: CodeQL
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  schedule:
+    - cron: "17 3 * * 1"
+
+permissions:
+  contents: read
+  security-events: write
+
+concurrency:
+  group: codeql-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  analyze:
+    uses: osloer-industries/.github/.github/workflows/codeql-javascript-typescript.yml@d4865a4b2c70c8433188f5200beac104b1c7fe86 # main

@@ -11,6 +11,7 @@
 
 [![CI](https://github.com/tn819/vakt/actions/workflows/ci.yml/badge.svg)](https://github.com/tn819/vakt/actions/workflows/ci.yml)
 [![Tests](https://github.com/tn819/vakt/actions/workflows/test.yml/badge.svg)](https://github.com/tn819/vakt/actions/workflows/test.yml)
+[![CodeQL](https://github.com/tn819/vakt/actions/workflows/codeql.yml/badge.svg)](https://github.com/tn819/vakt/actions/workflows/codeql.yml)
 [![Reliability](https://sonarcloud.io/api/project_badges/measure?project=tn819_agentctl&metric=reliability_rating)](https://sonarcloud.io/summary/new_code?id=tn819_agentctl)
 [![Quality Gate](https://sonarcloud.io/api/project_badges/measure?project=tn819_agentctl&metric=alert_status)](https://sonarcloud.io/summary/new_code?id=tn819_agentctl)
 [![Release](https://img.shields.io/github/v/release/tn819/vakt?label=release&color=22c55e)](https://github.com/tn819/vakt/releases)
