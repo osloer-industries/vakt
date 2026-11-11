@@ -1,4 +1,5 @@
 name: CI
+
 permissions:
   contents: read
 
@@ -7,11 +8,23 @@ on:
     branches: [main]
   pull_request:
 
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
+  workflow-security:
+    uses: osloer-industries/.github/.github/workflows/workflow-security.yml@d4865a4b2c70c8433188f5200beac104b1c7fe86 # main
+    permissions:
+      contents: read
+      actions: read
+
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
 
       - name: Setup Bun
         uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
@@ -24,21 +37,27 @@ jobs:
 
       - name: Validate JSON files
         run: |
-          for file in $(find . -name "*.json" -not -path "*/node_modules/*" -type f); do
-            python3 -m json.tool "$file" > /dev/null || (echo "Invalid JSON: $file" && exit 1)
-          done
+          set -euo pipefail
+          find . -name "*.json" -not -path "*/node_modules/*" -type f -print0 |
+            while IFS= read -r -d '' file; do
+              python3 -m json.tool "$file" > /dev/null
+            done
 
       - name: Validate workflow YAML
         run: |
-          for file in $(find .github/workflows -name "*.yml" -type f); do
-            python3 -c "import yaml, sys; yaml.safe_load(open('$file'))" || (echo "Invalid YAML: $file" && exit 1)
-          done
+          set -euo pipefail
+          find .github/workflows -name "*.yml" -type f -print0 |
+            while IFS= read -r -d '' file; do
+              python3 -c 'import yaml, sys; yaml.safe_load(open(sys.argv[1]))' "$file"
+            done
 
       - name: Validate shell scripts syntax
         run: |
-          for file in $(find . -name "*.sh" -not -path "*/node_modules/*" -type f); do
-            bash -n "$file" || (echo "Syntax error in: $file" && exit 1)
-          done
+          set -euo pipefail
+          find . -name "*.sh" -not -path "*/node_modules/*" -type f -print0 |
+            while IFS= read -r -d '' file; do
+              bash -n "$file"
+            done
 
       - name: Check skill files
         run: |
@@ -58,21 +77,16 @@ jobs:
           grep -q "#!/usr/bin/env bash" install.sh
           grep -q "curl" install.sh || grep -q "git clone" install.sh
 
-  dependency-review:
-    runs-on: ubuntu-latest
-    if: github.event_name == 'pull_request'
-    steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
-      - name: Dependency Review
-        uses: actions/dependency-review-action@2031cfc080254a8a887f58cffee85186f0e49e48 # v4
-        continue-on-error: true
-
   sonarcloud:
+    permissions:
+      contents: read
+      pull-requests: read
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           fetch-depth: 0
+          persist-credentials: false
 
       - name: Setup Bun
         uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
@@ -84,7 +98,7 @@ jobs:
         run: bun test --coverage --coverage-reporter lcov
 
       - name: SonarCloud Scan
-        uses: SonarSource/sonarcloud-github-action@v5
+        uses: SonarSource/sonarqube-scan-action@e805d875275f728fac1885b413934be6d7c63f65 # v8.4.1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
@@ -92,7 +106,9 @@ jobs:
   docker-e2e:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
 
       - name: Build Docker e2e harness
         run: docker compose -f tests/docker/docker-compose.yml build

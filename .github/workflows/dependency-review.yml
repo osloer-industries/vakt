@@ -1,0 +1,15 @@
+name: Dependency review
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: dependency-review-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  review:
+    uses: osloer-industries/.github/.github/workflows/dependency-review.yml@d4865a4b2c70c8433188f5200beac104b1c7fe86 # main
