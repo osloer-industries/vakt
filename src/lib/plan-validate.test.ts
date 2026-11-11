@@ -1,4 +1,14 @@
 import { describe, it, expect } from "bun:test";
+import { mkdtempSync, writeFileSync, rmSync } from "node:fs";
+import { join } from "node:path";
+import { tmpdir } from "node:os";
+import {
+  extractToolMentions,
+  formatPlanViolations,
+  hasOutboundNetwork,
+  readPlanFile,
+  resolvePlanFilePath,
+} from "./plan-validate";
 
 describe("extractToolMentions", () => {
   it("extracts tool names from plan text", () => {
@@ -10,9 +20,9 @@ Step 3: Bash("npm install")
     const mentions = extractToolMentions(planText);
 
     expect(mentions.length).toBeGreaterThan(0);
-    expect(mentions.some((m: { tool: string }) => m.tool === "Read")).toBe(true);
-    expect(mentions.some((m: { tool: string }) => m.tool === "Edit")).toBe(true);
-    expect(mentions.some((m: { tool: string }) => m.tool === "Bash")).toBe(true);
+    expect(mentions.some(m => m.tool === "Read")).toBe(true);
+    expect(mentions.some(m => m.tool === "Edit")).toBe(true);
+    expect(mentions.some(m => m.tool === "Bash")).toBe(true);
   });
 
   it("handles numbered steps without 'Step' prefix", () => {
@@ -88,7 +98,7 @@ describe("hasOutboundNetwork", () => {
   });
 });
 
-describe("formatViolations", () => {
+describe("formatPlanViolations", () => {
   it("formats error violations", () => {
     const violations = [
       {
@@ -100,7 +110,7 @@ describe("formatViolations", () => {
       },
     ];
 
-    const output = formatViolations(violations);
+    const output = formatPlanViolations(violations);
     expect(output).toContain("Step 1");
     expect(output).toContain("WebSearch");
     expect(output).toContain("denied");
@@ -118,7 +128,7 @@ describe("formatViolations", () => {
       },
     ];
 
-    const output = formatViolations(violations);
+    const output = formatPlanViolations(violations);
     expect(output).toContain("Step 2");
     expect(output).toContain("Bash");
     expect(output).toContain("warning");
@@ -141,76 +151,28 @@ describe("formatViolations", () => {
       },
     ];
 
-    const output = formatViolations(violations);
+    const output = formatPlanViolations(violations);
     expect(output).toContain("Step 1");
     expect(output).toContain("Step 3");
   });
 });
 
-function extractToolMentions(planText: string): Array<{ step: number; tool: string; args?: string }> {
-  const KNOWN_TOOLS = [
-    "Read", "Edit", "Write", "Bash", "WebSearch", "WebFetch",
-    "Grep", "GrepSearch", "Glob", "List", "Delete", "Apply"
-  ];
+describe("resolvePlanFilePath", () => {
+  it("rejects paths outside the working directory", () => {
+    expect(() => resolvePlanFilePath("/etc/passwd", "/tmp/workspace")).toThrow(
+      /under the current working directory/,
+    );
+  });
 
-  const mentions: Array<{ step: number; tool: string; args?: string }> = [];
-  const lines = planText.split("\n");
-
-  let stepNum = 0;
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i];
-    if (!line) continue;
-
-    const stepMatch = /^(?:Step\s+)?(\d+)[:.)\s]/i.exec(line);
-    if (stepMatch) {
-      stepNum = Number.parseInt(stepMatch[1] ?? "0", 10);
+  it("reads plan files under the working directory", () => {
+    const dir = mkdtempSync(join(tmpdir(), "vakt-plan-"));
+    try {
+      const planPath = join(dir, "plan.md");
+      writeFileSync(planPath, "Step 1: Read(\"x\")", "utf-8");
+      const text = readPlanFile("plan.md", dir);
+      expect(text).toContain("Read");
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
     }
-
-    for (const tool of KNOWN_TOOLS) {
-      const regex = new RegExp(`\\b${tool}\\s*\\(`, "i");
-      if (regex.test(line)) {
-        const argsMatch = /\(([^)]*)\)/.exec(line);
-        mentions.push({
-          step: stepNum || i + 1,
-          tool: tool,
-          args: argsMatch?.[1],
-        });
-      }
-    }
-  }
-
-  return mentions;
-}
-
-function hasOutboundNetwork(args: string | undefined): boolean {
-  if (!args) return false;
-  const OUTBOUND_NETWORK_PATTERNS = [
-    /curl\s+/i,
-    /wget\s+/i,
-    /fetch\s+/i,
-  ];
-  return OUTBOUND_NETWORK_PATTERNS.some((p) => p.test(args));
-}
-
-function formatViolations(violations: Array<{
-  step: number;
-  tool: string;
-  rule: string;
-  severity: "error" | "warning";
-  suggestion?: string;
-}>): string {
-  const red = (s: string) => s;
-  const yellow = (s: string) => s;
-
-  return violations.map((v) => {
-    const icon = v.severity === "error" ? red("✗") : yellow("⚠");
-    const lines = [
-      `Step ${v.step}: ${v.tool}`,
-      `  ${icon}  ${v.tool} — ${v.severity === "error" ? "denied" : "warning"} by ${v.rule}`,
-    ];
-    if (v.suggestion) {
-      lines.push(`     Suggestion: ${v.suggestion}`);
-    }
-    return lines.join("\n");
-  }).join("\n\n");
-}
+  });
+});
