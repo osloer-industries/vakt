@@ -14,6 +14,11 @@ setup_test_env() {
   export HOME="$SANDBOX_HOME"
   export AGENTS_DIR="$SANDBOX_HOME/.agents"
   export AGENTS_SECRETS_BACKEND="env"  # never trigger macOS keychain dialogs in tests
+  # Let path-boundary checks accept mktemp dirs outside $HOME (see userPathRoots).
+  export VAKT_TEST_MODE=1
+  local _vakt_extra="/tmp"
+  [[ -n "${TMPDIR:-}" ]] && _vakt_extra="${_vakt_extra}:${TMPDIR}"
+  export VAKT_EXTRA_PATH_ROOTS="$_vakt_extra"
 }
 
 teardown_test_env() {

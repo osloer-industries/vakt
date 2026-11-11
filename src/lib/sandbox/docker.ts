@@ -1,6 +1,8 @@
 import type {
   SandboxProvider, SandboxHandle, SandboxCreateOpts, ExecResult,
 } from "../sandbox";
+import { assertDockerImageRef, assertDockerResourceId } from "../safe-input";
+import { buildDockerExecStartPath, rebuildDockerApiPath } from "../docker-api-path";
 
 interface DockerOpts {
   socket?: string;
@@ -43,15 +45,24 @@ export class DockerSandboxProvider implements SandboxProvider {
     this.defaultNetwork = opts.network ?? "none";
   }
 
-  private url(path: string): string {
-    return `http://localhost/v1.41${path}`;
+  private static readonly DOCKER_ENGINE = "http://127.0.0.1/v1.41";
+
+  private async dockerFetch(path: string, init: RequestInit): Promise<Response> {
+    const safePath = rebuildDockerApiPath(path);
+    if (!/^\/[a-z0-9/?.=&_%-]+$/i.test(safePath)) {
+      throw new Error("Refusing unsafe Docker API path");
+    }
+    return fetch(DockerSandboxProvider.DOCKER_ENGINE + safePath, {
+      ...init,
+      redirect: "error",
+      // @ts-ignore — Bun extension: unix socket fetch
+      unix: this.socket,
+    });
   }
 
   private async req<T>(method: string, path: string, body?: unknown): Promise<T> {
-    const res = await fetch(this.url(path), {
+    const res = await this.dockerFetch(path, {
       method,
-      // @ts-ignore — Bun extension: unix socket fetch
-      unix: this.socket,
       headers: body ? { "Content-Type": "application/json" } : undefined,
       body: body ? JSON.stringify(body) : undefined,
     });
@@ -64,15 +75,9 @@ export class DockerSandboxProvider implements SandboxProvider {
   }
 
   private async pullImage(image: string): Promise<void> {
-    // POST /images/create?fromImage=<image> — streams JSON progress lines, we just drain it
-    const res = await fetch(
-      this.url(`/images/create?fromImage=${encodeURIComponent(image)}`),
-      {
-        method: "POST",
-        // @ts-ignore
-        unix: this.socket,
-      },
-    );
+    assertDockerImageRef(image);
+    const apiPath = `/images/create?fromImage=${encodeURIComponent(image)}`;
+    const res = await this.dockerFetch(apiPath, { method: "POST" });
     if (!res.ok) {
       const text = await res.text().catch(() => "");
       throw new Error(`Docker pull ${image} → ${res.status}: ${text}`);
@@ -103,6 +108,7 @@ export class DockerSandboxProvider implements SandboxProvider {
     if (opts.name) body["Name"] = opts.name;
 
     const { Id } = await this.req<{ Id: string }>("POST", "/containers/create", body);
+    assertDockerResourceId(Id);
     await this.req("POST", `/containers/${Id}/start`);
     // Ensure /workspace always exists (may be empty if no repo bind-mounted)
     const handle = { id: Id, provider: this.name };
@@ -122,17 +128,16 @@ export class DockerSandboxProvider implements SandboxProvider {
       },
     );
 
-    const res = await fetch(this.url(`/exec/${execId}/start`), {
+    const execPath = buildDockerExecStartPath(execId);
+    const res = await this.dockerFetch(execPath, {
       method: "POST",
-      // @ts-ignore
-      unix: this.socket,
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ Detach: false, Tty: false }),
     });
 
     if (!res.ok) {
       const text = await res.text().catch(() => "");
-      throw new Error(`Docker API POST /exec/${execId}/start → ${res.status}: ${text}`);
+      throw new Error(`Docker API POST ${execPath} → ${res.status}: ${text}`);
     }
 
     const buf = await res.arrayBuffer();
