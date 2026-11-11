@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { assertOciReference } from "./safe-input";
+import { validatedOciReference } from "./safe-input-oci";
 import { requireExecutable, safeSpawnEnv } from "./safe-exec";
 
 export type CosignVerifyOutput = {
@@ -8,15 +8,9 @@ export type CosignVerifyOutput = {
   stderr: string;
 };
 
-/** Run cosign verify; identifier is validated twice before argv is built. */
+/** Run cosign verify; identifier is parsed into a rebuilt OCI ref before argv is built. */
 export function runCosignVerify(untrustedIdentifier: string): CosignVerifyOutput {
-  const firstPass = untrustedIdentifier.trim();
-  assertOciReference(firstPass);
-  const ociRef = firstPass;
-  assertOciReference(ociRef);
-  if (!/^[\w./:@-]+$/i.test(ociRef) || ociRef.length > 512) {
-    throw new Error("Invalid OCI reference for cosign");
-  }
+  const ociRef = validatedOciReference(untrustedIdentifier);
 
   const cosignBin = requireExecutable("cosign");
   try {
