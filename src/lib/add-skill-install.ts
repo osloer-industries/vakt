@@ -6,7 +6,7 @@ import { promptBoolean } from "./prompt";
 import {
   assertGitRemoteUrl,
   assertSafeSkillName,
-  defaultUserPathRoots,
+  userPathRoots,
   resolveLocalDirectory,
   sanitizeForLog,
 } from "./safe-input";
@@ -52,7 +52,7 @@ export async function installSkillFromLocal(
   makeGlobalFlag: boolean | undefined,
 ): Promise<void> {
   mkdirSync(skillsDir, { recursive: true });
-  const roots = defaultUserPathRoots(AGENTS_DIR);
+  const roots = userPathRoots(AGENTS_DIR);
   const abs = resolveLocalDirectory(skillPath, roots);
   const skillName = name ? assertSafeSkillName(name) : assertSafeSkillName(basename(abs));
   const dest = join(skillsDir, skillName);

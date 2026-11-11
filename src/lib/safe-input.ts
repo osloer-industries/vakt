@@ -1,6 +1,6 @@
 import { existsSync, readFileSync, realpathSync, statSync } from "node:fs";
 import { basename, resolve } from "node:path";
-import { homedir, tmpdir } from "node:os";
+import { homedir } from "node:os";
 
 /** Strip control characters for safe terminal/log output (log injection). */
 export function sanitizeForLog(value: string): string {
@@ -42,8 +42,33 @@ export function ensureUnderAllowedRoots(resolvedPath: string, allowedRoots: read
   throw new Error("Path is outside allowed directories");
 }
 
+/** Production allowlist: cwd, agents dir, and user home only. */
 export function defaultUserPathRoots(agentsDir: string): string[] {
-  return [process.cwd(), agentsDir, homedir(), tmpdir()];
+  return [process.cwd(), agentsDir, homedir()];
+}
+
+/**
+ * Extra directory roots from env, only when {@link VAKT_TEST_MODE} is `1` (e2e / unit harness).
+ */
+export function testExtraPathRootsFromEnv(): string[] {
+  if (process.env.VAKT_TEST_MODE !== "1") {
+    return [];
+  }
+  const raw = process.env.VAKT_EXTRA_PATH_ROOTS ?? "";
+  const roots: string[] = [];
+  for (const part of raw.split(":")) {
+    const trimmed = part.trim();
+    if (!trimmed) continue;
+    const abs = resolve(trimmed);
+    assertSafePath(abs);
+    roots.push(abs);
+  }
+  return roots;
+}
+
+/** Resolved roots for CLI path checks: production roots plus optional test-only extras. */
+export function userPathRoots(agentsDir: string): string[] {
+  return [...defaultUserPathRoots(agentsDir), ...testExtraPathRootsFromEnv()];
 }
 
 /** Resolve a user-supplied file path to an absolute, existing regular file under allowed roots. */

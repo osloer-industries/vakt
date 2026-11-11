@@ -1,6 +1,6 @@
 import type { Command } from "commander";
 import { existsSync } from "node:fs";
-import { defaultUserPathRoots, readBoundedUtf8File } from "../lib/safe-input";
+import { readBoundedUtf8File, userPathRoots } from "../lib/safe-input";
 import { AGENTS_DIR } from "../lib/config";
 import { loadMergedPolicy, PolicyEngine } from "../lib/policy";
 import { KNOWN_TOOLS } from "../lib/schemas";
@@ -201,7 +201,7 @@ async function loadPlanContent(file: string | undefined): Promise<string> {
   if (!file) {
     return readStdin();
   }
-  return readBoundedUtf8File(file, defaultUserPathRoots(AGENTS_DIR));
+  return readBoundedUtf8File(file, userPathRoots(AGENTS_DIR));
 }
 
 function readStdin(): Promise<string> {

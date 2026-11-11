@@ -12,11 +12,36 @@ import {
   assertDockerApiPath,
   assertOciReference,
   assertNpmPackageName,
+  defaultUserPathRoots,
+  testExtraPathRootsFromEnv,
+  userPathRoots,
 } from "./safe-input";
 
 function testRoots(tmp: string): string[] {
   return [tmp];
 }
+
+describe("userPathRoots", () => {
+  it("production roots exclude tmpdir", () => {
+    const roots = defaultUserPathRoots("/home/user/.agents");
+    expect(roots).not.toContain("/tmp");
+    expect(roots).toHaveLength(3);
+  });
+
+  it("ignores extra roots unless VAKT_TEST_MODE is set", () => {
+    const prevMode = process.env.VAKT_TEST_MODE;
+    const prevExtra = process.env.VAKT_EXTRA_PATH_ROOTS;
+    delete process.env.VAKT_TEST_MODE;
+    process.env.VAKT_EXTRA_PATH_ROOTS = "/tmp";
+    expect(testExtraPathRootsFromEnv()).toEqual([]);
+    const withTest = userPathRoots("/home/user/.agents");
+    expect(withTest).toHaveLength(3);
+    process.env.VAKT_TEST_MODE = "1";
+    expect(testExtraPathRootsFromEnv()).toContain("/tmp");
+    process.env.VAKT_TEST_MODE = prevMode;
+    process.env.VAKT_EXTRA_PATH_ROOTS = prevExtra;
+  });
+});
 
 describe("sanitizeForLog", () => {
   it("strips newlines and control characters", () => {
