@@ -16,11 +16,13 @@ on:
       - main
 
 permissions:
-  contents: write
-  pull-requests: write
+  contents: read
 
 jobs:
   release:
+    permissions:
+      contents: write
+      pull-requests: write
     runs-on: ubuntu-latest
     # Only run on main branch push or manual dispatch
     if: github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch'
@@ -28,7 +30,7 @@ jobs:
       released: ${{ steps.tag-check.outputs.released }}
       version: ${{ steps.tag-check.outputs.version }}
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           fetch-depth: 0
           persist-credentials: false
@@ -37,7 +39,7 @@ jobs:
         run: git fetch --tags --force
 
       - name: Setup Bun
-        uses: oven-sh/setup-bun@ecf28ddc73e819eb6fa29df6b34ef8921c743461 # v2
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
 
       - name: Install dependencies
         run: bun install --frozen-lockfile
@@ -48,7 +50,7 @@ jobs:
           sudo apt-get install -y bats
 
       - name: Create kind cluster for Kata kubectl e2e
-        uses: helm/kind-action@a1b0e391336a6ee6713a0583f8c6240d70863de3 # v1.12.0
+        uses: helm/kind-action@1544676c07bb3570fcb70166beaa07c4528fd4aa # v1.15.1
         with:
           cluster_name: vakt-ci
 
@@ -73,7 +75,10 @@ jobs:
 
       - name: Capture tag before release
         id: before-release
-        run: echo "tag=$(git tag --sort=-version:refname | head -1)" >> $GITHUB_OUTPUT
+        run: |
+          set -euo pipefail
+          tag="$(git tag --sort=-version:refname | head -1)"
+          echo "tag=${tag}" >> "$GITHUB_OUTPUT"
 
       - name: Configure git for semantic-release
         run: git remote set-url origin https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git
@@ -97,35 +102,42 @@ jobs:
       - name: Check if released
         id: tag-check
         if: github.event.inputs.dry_run != 'true'
+        env:
+          BEFORE: ${{ steps.before-release.outputs.tag }}
         run: |
+          set -euo pipefail
           git fetch --tags
-          AFTER=$(git tag --sort=-version:refname | head -1)
-          BEFORE="${{ steps.before-release.outputs.tag }}"
+          AFTER="$(git tag --sort=-version:refname | head -1)"
           if [ "$BEFORE" != "$AFTER" ]; then
-            echo "released=true" >> $GITHUB_OUTPUT
-            echo "version=${AFTER#v}" >> $GITHUB_OUTPUT
+            echo "released=true" >> "$GITHUB_OUTPUT"
+            echo "version=${AFTER#v}" >> "$GITHUB_OUTPUT"
           else
-            echo "released=false" >> $GITHUB_OUTPUT
+            echo "released=false" >> "$GITHUB_OUTPUT"
           fi
 
   release-macos:
+    permissions:
+      contents: write
     runs-on: macos-latest
     needs: release
     if: needs.release.outputs.released == 'true'
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           ref: v${{ needs.release.outputs.version }}
+          persist-credentials: false
 
       - name: Setup Bun
-        uses: oven-sh/setup-bun@ecf28ddc73e819eb6fa29df6b34ef8921c743461 # v2
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
 
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
       - name: Build macOS arm64 binary
+        env:
+          VERSION: ${{ needs.release.outputs.version }}
         run: |
-          VERSION="${{ needs.release.outputs.version }}"
+          set -euo pipefail
           bun build src/index.ts --compile --outfile dist/vakt
           tar -czf "vakt-${VERSION}-darwin-arm64.tar.gz" -C dist vakt
           shasum -a 256 "vakt-${VERSION}-darwin-arm64.tar.gz" > checksums-darwin.txt
@@ -133,24 +145,29 @@ jobs:
       - name: Upload to release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ needs.release.outputs.version }}
         run: |
-          VERSION="${{ needs.release.outputs.version }}"
+          set -euo pipefail
           gh release upload "v${VERSION}" \
             "vakt-${VERSION}-darwin-arm64.tar.gz" \
             "checksums-darwin.txt"
 
   release-homebrew:
+    permissions:
+      contents: write
+      pull-requests: write
     runs-on: ubuntu-latest
     needs: [release, release-macos]
     if: needs.release.outputs.released == 'true'
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           # Check out main so the formula commit is based on the current branch
           # tip. Pushing directly from a detached tag fails GH006 (status checks
           # not yet run for that commit SHA). PR + auto-merge is the safe path.
           ref: main
           fetch-depth: 0
+          persist-credentials: false
           token: ${{ secrets.RELEASE_PAT }}
 
       - name: Compute SHAs and update formula
@@ -161,8 +178,9 @@ jobs:
           set -euo pipefail
           gh release download "v${VERSION}" --pattern "checksums-darwin.txt" --pattern "checksums.txt" --dir /tmp/checksums
 
-          export SHA_DARWIN_ARM64=$(grep "darwin-arm64" /tmp/checksums/checksums-darwin.txt | awk '{print $1}')
-          export SHA_LINUX_X86_64=$(grep "linux-x86_64" /tmp/checksums/checksums.txt | awk '{print $1}')
+          SHA_DARWIN_ARM64="$(grep "darwin-arm64" /tmp/checksums/checksums-darwin.txt | awk '{print $1}')"
+          SHA_LINUX_X86_64="$(grep "linux-x86_64" /tmp/checksums/checksums.txt | awk '{print $1}')"
+          export SHA_DARWIN_ARM64 SHA_LINUX_X86_64
 
           python3 scripts/update-formula.py
 
@@ -186,4 +204,6 @@ jobs:
             --base main \
             --head "$BRANCH"
           # Requires 'Allow auto-merge' enabled in repo Settings → General → Pull Requests.
-          gh pr merge "$BRANCH" --squash --auto --delete-branch || true
+          if ! gh pr merge "$BRANCH" --squash --auto --delete-branch; then
+            echo "Formula PR remains open (auto-merge disabled or checks pending)."
+          fi
