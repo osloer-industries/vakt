@@ -6,7 +6,7 @@ export const SAFE_PATH = "/usr/local/bin:/usr/bin:/bin:/opt/homebrew/bin";
 
 function whichBinary(): string {
   return process.platform === "win32"
-    ? "C:\\Windows\\System32\\where.exe"
+    ? String.raw`C:\Windows\System32\where.exe`
     : "/usr/bin/which";
 }
 

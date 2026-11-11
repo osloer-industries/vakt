@@ -87,13 +87,13 @@ async function handleRegistryServer(
   
   if (!vResult.ok) {
     if (registryPolicy === "registry-only") {
-      console.error(red(`✗ Verification failed for ${firstArg}:`));
-      console.error(red(`  ${vResult.reason}`));
+      console.error(red(`✗ Verification failed for ${sanitizeForLog(firstArg)}:`));
+      console.error(red(`  ${sanitizeForLog(vResult.reason)}`));
       console.error(red(`\nServer not added. Set policy.registryPolicy to "warn-unverified" or "allow-unverified" to proceed.`));
       process.exit(1);
     } else if (registryPolicy === "warn-unverified") {
-      console.log(yellow(`⚠ Warning: ${firstArg} could not be verified`));
-      console.log(yellow(`  ${vResult.reason}`));
+      console.log(yellow(`⚠ Warning: ${sanitizeForLog(firstArg)} could not be verified`));
+      console.log(yellow(`  ${sanitizeForLog(vResult.reason)}`));
     }
   }
   

@@ -1,5 +1,6 @@
-import { existsSync, realpathSync, statSync } from "node:fs";
+import { existsSync, readFileSync, realpathSync, statSync } from "node:fs";
 import { basename, resolve } from "node:path";
+import { homedir } from "node:os";
 
 /** Strip control characters for safe terminal/log output (log injection). */
 export function sanitizeForLog(value: string): string {
@@ -22,8 +23,31 @@ export function assertSafePath(p: string): void {
   }
 }
 
-/** Resolve a user-supplied file path to an absolute, existing regular file. */
-export function resolveReadableFile(userPath: string): string {
+function rootPrefix(root: string): string {
+  const real = realpathSync.native(resolve(root));
+  return real.endsWith("/") ? real : `${real}/`;
+}
+
+/** Ensure a resolved path stays within one of the allowed directory roots. */
+export function ensureUnderAllowedRoots(resolvedPath: string, allowedRoots: readonly string[]): string {
+  const real = realpathSync.native(resolvedPath);
+  assertSafePath(real);
+  for (const root of allowedRoots) {
+    const prefix = rootPrefix(root);
+    const base = prefix.slice(0, -1);
+    if (real === base || real.startsWith(prefix)) {
+      return real;
+    }
+  }
+  throw new Error("Path is outside allowed directories");
+}
+
+export function defaultUserPathRoots(agentsDir: string): string[] {
+  return [process.cwd(), agentsDir, homedir()];
+}
+
+/** Resolve a user-supplied file path to an absolute, existing regular file under allowed roots. */
+export function resolveReadableFile(userPath: string, allowedRoots: readonly string[]): string {
   if (!userPath || userPath.includes("\0")) {
     throw new Error("Invalid file path");
   }
@@ -33,15 +57,20 @@ export function resolveReadableFile(userPath: string): string {
   if (!existsSync(abs)) {
     throw new Error(`File not found: ${abs}`);
   }
-  const st = statSync(abs);
-  if (!st.isFile()) {
-    throw new Error(`Not a file: ${abs}`);
+  const bounded = ensureUnderAllowedRoots(realpathSync.native(abs), allowedRoots);
+  if (!statSync(bounded).isFile()) {
+    throw new Error(`Not a file: ${bounded}`);
   }
-  return realpathSync.native(abs);
+  return bounded;
 }
 
-/** Resolve a user-supplied path to an absolute, existing directory. */
-export function resolveLocalDirectory(userPath: string): string {
+/** Read a UTF-8 text file after path boundary validation. */
+export function readBoundedUtf8File(userPath: string, allowedRoots: readonly string[]): string {
+  return readFileSync(resolveReadableFile(userPath, allowedRoots), "utf-8");
+}
+
+/** Resolve a user-supplied path to an absolute, existing directory under allowed roots. */
+export function resolveLocalDirectory(userPath: string, allowedRoots: readonly string[]): string {
   if (!userPath || userPath.includes("\0")) {
     throw new Error("Invalid path");
   }
@@ -51,11 +80,11 @@ export function resolveLocalDirectory(userPath: string): string {
   if (!existsSync(abs)) {
     throw new Error(`Path not found: ${abs}`);
   }
-  const st = statSync(abs);
-  if (!st.isDirectory()) {
-    throw new Error(`Not a directory: ${abs}`);
+  const bounded = ensureUnderAllowedRoots(realpathSync.native(abs), allowedRoots);
+  if (!statSync(bounded).isDirectory()) {
+    throw new Error(`Not a directory: ${bounded}`);
   }
-  return realpathSync.native(abs);
+  return bounded;
 }
 
 /** Skill name must be a single path segment (no slashes or traversal). */
@@ -70,62 +99,12 @@ export function assertSafeSkillName(name: string): string {
   return base;
 }
 
-function assertGitRepoPath(pathname: string): void {
-  const path = decodeURIComponent(pathname);
-  if (!path.startsWith("/") || path.includes("..") || path.includes("\\")) {
-    throw new Error("Unsupported or invalid git URL path");
-  }
-  const segments = path.split("/").filter(Boolean);
-  if (segments.length === 0) {
-    throw new Error("Unsupported or invalid git URL path");
-  }
-  for (const seg of segments) {
-    if (!/^[\w.-]+$/.test(seg)) {
-      throw new Error("Unsupported or invalid git URL path");
-    }
-  }
-}
-
-export function assertGitRemoteUrl(url: string): void {
-  if (url.startsWith("https://")) {
-    let parsed: URL;
-    try {
-      parsed = new URL(url);
-    } catch {
-      throw new Error(`Unsupported or invalid git URL: ${url}`);
-    }
-    if (parsed.protocol !== "https:" || parsed.username || parsed.password) {
-      throw new Error(`Unsupported or invalid git URL: ${url}`);
-    }
-    if (parsed.search || parsed.hash) {
-      throw new Error(`Unsupported or invalid git URL: ${url}`);
-    }
-    assertGitRepoPath(parsed.pathname);
-    return;
-  }
-  if (url.startsWith("git@")) {
-    const colon = url.indexOf(":", "git@".length);
-    if (colon <= "git@".length || colon === url.length - 1) {
-      throw new Error(`Unsupported or invalid git URL: ${url}`);
-    }
-    const host = url.slice("git@".length, colon);
-    const repoPath = url.slice(colon + 1);
-    if (!/^[\w.-]+$/.test(host) || repoPath.includes("..")) {
-      throw new Error(`Unsupported or invalid git URL: ${url}`);
-    }
-    const segments = repoPath.split("/").filter(Boolean);
-    if (segments.length === 0) {
-      throw new Error(`Unsupported or invalid git URL: ${url}`);
-    }
-    for (const seg of segments) {
-      if (!/^[\w.-]+$/.test(seg)) {
-        throw new Error(`Unsupported or invalid git URL: ${url}`);
-      }
-    }
-    return;
-  }
-  throw new Error(`Unsupported or invalid git URL: ${url}`);
-}
+export { assertGitRemoteUrl } from "./safe-input-git";
+export {
+  assertDockerImageRef,
+  assertOciReference,
+  validatedOciReference,
+} from "./safe-input-oci";
 
 const DOCKER_ID = /^[a-f0-9]{12,64}$/i;
 
@@ -164,49 +143,12 @@ export function validateDockerApiPath(path: string): void {
   }
 }
 
-function isOciNameChar(ch: string): boolean {
-  const c = ch.charCodeAt(0);
-  return (c >= 48 && c <= 57) || (c >= 97 && c <= 122) || (c >= 65 && c <= 90) || ch === "." || ch === "_" || ch === "-";
-}
-
-export function assertOciReference(ref: string): void {
-  const trimmed = ref.trim();
-  if (trimmed.length === 0 || trimmed.length > 512) {
-    throw new Error(`Invalid OCI image reference: ${ref}`);
-  }
-  let namePart = trimmed;
-  const at = trimmed.lastIndexOf("@sha256:");
-  if (at >= 0) {
-    const digest = trimmed.slice(at + "@sha256:".length);
-    if (!/^[a-f0-9]{64}$/i.test(digest)) {
-      throw new Error(`Invalid OCI image reference: ${ref}`);
-    }
-    namePart = trimmed.slice(0, at);
-  }
-  const segments = namePart.split("/");
-  if (segments.length === 0 || segments.some(s => s.length === 0)) {
-    throw new Error(`Invalid OCI image reference: ${ref}`);
-  }
-  for (let i = 0; i < segments.length; i++) {
-    let seg = segments[i]!;
-    if (i === segments.length - 1 && seg.includes(":")) {
-      const colon = seg.indexOf(":");
-      const tag = seg.slice(colon + 1);
-      seg = seg.slice(0, colon);
-      if (tag.length === 0 || tag.length > 128) {
-        throw new Error(`Invalid OCI image reference: ${ref}`);
-      }
-      for (const ch of tag) {
-        if (!isOciNameChar(ch)) throw new Error(`Invalid OCI image reference: ${ref}`);
-      }
-    } else if (seg.includes(":")) {
-      throw new Error(`Invalid OCI image reference: ${ref}`);
-    }
-    if (seg.length === 0) throw new Error(`Invalid OCI image reference: ${ref}`);
-    for (const ch of seg) {
-      if (!isOciNameChar(ch)) throw new Error(`Invalid OCI image reference: ${ref}`);
-    }
-  }
+/** Build a validated Docker exec start API path from an engine exec id. */
+export function buildDockerExecStartPath(execId: string): string {
+  assertDockerResourceId(execId);
+  const path = `/exec/${execId}/start`;
+  validateDockerApiPath(path);
+  return path;
 }
 
 const NPM_PKG = /^(?:@[\w.-]+\/)?[\w.-]+$/;
@@ -219,6 +161,3 @@ export function assertNpmPackageName(pkg: string): string {
   return cleaned;
 }
 
-export function assertDockerImageRef(image: string): void {
-  assertOciReference(image);
-}

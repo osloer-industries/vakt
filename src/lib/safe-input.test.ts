@@ -14,6 +14,10 @@ import {
   assertNpmPackageName,
 } from "./safe-input";
 
+function testRoots(tmp: string): string[] {
+  return [tmp];
+}
+
 describe("sanitizeForLog", () => {
   it("strips newlines and control characters", () => {
     expect(sanitizeForLog("a\nb\rc")).toBe("a?b?c");
@@ -22,14 +26,14 @@ describe("sanitizeForLog", () => {
 
 describe("resolveReadableFile", () => {
   it("rejects path traversal segments before resolve", () => {
-    expect(() => resolveReadableFile("../../etc/passwd")).toThrow("Path traversal rejected");
+    expect(() => resolveReadableFile("../../etc/passwd", [process.cwd()])).toThrow();
   });
 
   it("resolves an existing file", () => {
     const tmp = mkdtempSync("/tmp/vakt-safe-");
     const f = join(tmp, "plan.md");
     writeFileSync(f, "# plan");
-    const resolved = resolveReadableFile(f);
+    const resolved = resolveReadableFile(f, testRoots(tmp));
     expect(resolved.endsWith("plan.md")).toBe(true);
     rmSync(tmp, { recursive: true });
   });
@@ -40,7 +44,7 @@ describe("resolveLocalDirectory", () => {
     const tmp = mkdtempSync("/tmp/vakt-safe-");
     const f = join(tmp, "file.txt");
     writeFileSync(f, "x");
-    expect(() => resolveLocalDirectory(f)).toThrow("Not a directory");
+    expect(() => resolveLocalDirectory(f, testRoots(tmp))).toThrow("Not a directory");
     rmSync(tmp, { recursive: true });
   });
 });

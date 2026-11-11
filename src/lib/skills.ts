@@ -8,7 +8,6 @@ import {
   renameSync,
   statSync,
   writeSync,
-  writeFileSync,
 } from "node:fs";
 import { join, basename, dirname } from "node:path";
 import { spawnSync } from "node:child_process";

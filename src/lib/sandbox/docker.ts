@@ -1,7 +1,12 @@
 import type {
   SandboxProvider, SandboxHandle, SandboxCreateOpts, ExecResult,
 } from "../sandbox";
-import { assertDockerImageRef, assertDockerResourceId, validateDockerApiPath } from "../safe-input";
+import {
+  assertDockerImageRef,
+  assertDockerResourceId,
+  buildDockerExecStartPath,
+  validateDockerApiPath,
+} from "../safe-input";
 
 interface DockerOpts {
   socket?: string;
@@ -48,12 +53,18 @@ export class DockerSandboxProvider implements SandboxProvider {
     return `http://localhost/v1.41${path}`;
   }
 
-  private async req<T>(method: string, path: string, body?: unknown): Promise<T> {
-    validateDockerApiPath(path);
-    const res = await fetch(this.url(path), {
-      method,
+  private async dockerFetch(path: string, init: RequestInit): Promise<Response> {
+    validateDockerApiPath(path.split("?")[0] ?? path);
+    return fetch(this.url(path), {
+      ...init,
       // @ts-ignore — Bun extension: unix socket fetch
       unix: this.socket,
+    });
+  }
+
+  private async req<T>(method: string, path: string, body?: unknown): Promise<T> {
+    const res = await this.dockerFetch(path, {
+      method,
       headers: body ? { "Content-Type": "application/json" } : undefined,
       body: body ? JSON.stringify(body) : undefined,
     });
@@ -69,14 +80,7 @@ export class DockerSandboxProvider implements SandboxProvider {
     assertDockerImageRef(image);
     const apiPath = `/images/create?fromImage=${encodeURIComponent(image)}`;
     validateDockerApiPath(apiPath.split("?")[0]!);
-    const res = await fetch(
-      this.url(apiPath),
-      {
-        method: "POST",
-        // @ts-ignore
-        unix: this.socket,
-      },
-    );
+    const res = await this.dockerFetch(apiPath, { method: "POST" });
     if (!res.ok) {
       const text = await res.text().catch(() => "");
       throw new Error(`Docker pull ${image} → ${res.status}: ${text}`);
@@ -127,20 +131,16 @@ export class DockerSandboxProvider implements SandboxProvider {
       },
     );
 
-    assertDockerResourceId(execId);
-    const execPath = `/exec/${execId}/start`;
-    validateDockerApiPath(execPath);
-    const res = await fetch(this.url(execPath), {
+    const execPath = buildDockerExecStartPath(execId);
+    const res = await this.dockerFetch(execPath, {
       method: "POST",
-      // @ts-ignore
-      unix: this.socket,
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ Detach: false, Tty: false }),
     });
 
     if (!res.ok) {
       const text = await res.text().catch(() => "");
-      throw new Error(`Docker API POST /exec/${execId}/start → ${res.status}: ${text}`);
+      throw new Error(`Docker API POST ${execPath} → ${res.status}: ${text}`);
     }
 
     const buf = await res.arrayBuffer();
