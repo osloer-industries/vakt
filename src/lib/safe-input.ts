@@ -70,11 +70,60 @@ export function assertSafeSkillName(name: string): string {
   return base;
 }
 
-const GIT_HTTPS = /^https:\/\/[\w.-]+(\/[\w.\-/]+)*(\.git)?\/?$/;
-const GIT_SSH = /^git@[\w.-]+:[\w.\-/]+(\.git)?$/;
+function assertGitRepoPath(pathname: string): void {
+  const path = decodeURIComponent(pathname);
+  if (!path.startsWith("/") || path.includes("..") || path.includes("\\")) {
+    throw new Error("Unsupported or invalid git URL path");
+  }
+  const segments = path.split("/").filter(Boolean);
+  if (segments.length === 0) {
+    throw new Error("Unsupported or invalid git URL path");
+  }
+  for (const seg of segments) {
+    if (!/^[\w.-]+$/.test(seg)) {
+      throw new Error("Unsupported or invalid git URL path");
+    }
+  }
+}
 
 export function assertGitRemoteUrl(url: string): void {
-  if (GIT_HTTPS.test(url) || GIT_SSH.test(url)) return;
+  if (url.startsWith("https://")) {
+    let parsed: URL;
+    try {
+      parsed = new URL(url);
+    } catch {
+      throw new Error(`Unsupported or invalid git URL: ${url}`);
+    }
+    if (parsed.protocol !== "https:" || parsed.username || parsed.password) {
+      throw new Error(`Unsupported or invalid git URL: ${url}`);
+    }
+    if (parsed.search || parsed.hash) {
+      throw new Error(`Unsupported or invalid git URL: ${url}`);
+    }
+    assertGitRepoPath(parsed.pathname);
+    return;
+  }
+  if (url.startsWith("git@")) {
+    const colon = url.indexOf(":", "git@".length);
+    if (colon <= "git@".length || colon === url.length - 1) {
+      throw new Error(`Unsupported or invalid git URL: ${url}`);
+    }
+    const host = url.slice("git@".length, colon);
+    const repoPath = url.slice(colon + 1);
+    if (!/^[\w.-]+$/.test(host) || repoPath.includes("..")) {
+      throw new Error(`Unsupported or invalid git URL: ${url}`);
+    }
+    const segments = repoPath.split("/").filter(Boolean);
+    if (segments.length === 0) {
+      throw new Error(`Unsupported or invalid git URL: ${url}`);
+    }
+    for (const seg of segments) {
+      if (!/^[\w.-]+$/.test(seg)) {
+        throw new Error(`Unsupported or invalid git URL: ${url}`);
+      }
+    }
+    return;
+  }
   throw new Error(`Unsupported or invalid git URL: ${url}`);
 }
 
@@ -115,13 +164,48 @@ export function validateDockerApiPath(path: string): void {
   }
 }
 
-const OCI_REF =
-  /^(?:[a-z0-9]+(?:[._-][a-z0-9]+)*(?:\/[a-z0-9]+(?:[._-][a-z0-9]+)*)*)(?::[\w][\w.\-]{0,127})?(?:@sha256:[a-f0-9]{64})?$/i;
+function isOciNameChar(ch: string): boolean {
+  const c = ch.charCodeAt(0);
+  return (c >= 48 && c <= 57) || (c >= 97 && c <= 122) || (c >= 65 && c <= 90) || ch === "." || ch === "_" || ch === "-";
+}
 
 export function assertOciReference(ref: string): void {
   const trimmed = ref.trim();
-  if (!OCI_REF.test(trimmed)) {
+  if (trimmed.length === 0 || trimmed.length > 512) {
     throw new Error(`Invalid OCI image reference: ${ref}`);
+  }
+  let namePart = trimmed;
+  const at = trimmed.lastIndexOf("@sha256:");
+  if (at >= 0) {
+    const digest = trimmed.slice(at + "@sha256:".length);
+    if (!/^[a-f0-9]{64}$/i.test(digest)) {
+      throw new Error(`Invalid OCI image reference: ${ref}`);
+    }
+    namePart = trimmed.slice(0, at);
+  }
+  const segments = namePart.split("/");
+  if (segments.length === 0 || segments.some(s => s.length === 0)) {
+    throw new Error(`Invalid OCI image reference: ${ref}`);
+  }
+  for (let i = 0; i < segments.length; i++) {
+    let seg = segments[i]!;
+    if (i === segments.length - 1 && seg.includes(":")) {
+      const colon = seg.indexOf(":");
+      const tag = seg.slice(colon + 1);
+      seg = seg.slice(0, colon);
+      if (tag.length === 0 || tag.length > 128) {
+        throw new Error(`Invalid OCI image reference: ${ref}`);
+      }
+      for (const ch of tag) {
+        if (!isOciNameChar(ch)) throw new Error(`Invalid OCI image reference: ${ref}`);
+      }
+    } else if (seg.includes(":")) {
+      throw new Error(`Invalid OCI image reference: ${ref}`);
+    }
+    if (seg.length === 0) throw new Error(`Invalid OCI image reference: ${ref}`);
+    for (const ch of seg) {
+      if (!isOciNameChar(ch)) throw new Error(`Invalid OCI image reference: ${ref}`);
+    }
   }
 }
 
@@ -135,11 +219,6 @@ export function assertNpmPackageName(pkg: string): string {
   return cleaned;
 }
 
-const DOCKER_IMAGE =
-  /^[\w][\w.\-/]*(?::[\w][\w.\-]*)?(@sha256:[a-f0-9]{64})?$/;
-
 export function assertDockerImageRef(image: string): void {
-  if (!DOCKER_IMAGE.test(image)) {
-    throw new Error(`Invalid Docker image reference: ${image}`);
-  }
+  assertOciReference(image);
 }

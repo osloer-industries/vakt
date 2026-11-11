@@ -1,5 +1,16 @@
-import { existsSync, readdirSync, readFileSync, writeFileSync, statSync } from "node:fs";
-import { join, basename } from "node:path";
+import {
+  closeSync,
+  existsSync,
+  fsyncSync,
+  openSync,
+  readdirSync,
+  readFileSync,
+  renameSync,
+  statSync,
+  writeSync,
+  writeFileSync,
+} from "node:fs";
+import { join, basename, dirname } from "node:path";
 import { spawnSync } from "node:child_process";
 import { assertSafePath } from "./safe-input";
 import { requireExecutable, safeSpawnEnv } from "./safe-exec";
@@ -261,6 +272,23 @@ function gitBinary(): string {
   return requireExecutable("git");
 }
 
+function writeUtf8FileAtomic(filePath: string, content: string): void {
+  assertSafePath(filePath);
+  assertSafePath(dirname(filePath));
+  const tmp = join(
+    dirname(filePath),
+    `.${basename(filePath)}.${process.pid}.${Date.now()}.tmp`,
+  );
+  const fd = openSync(tmp, "wx", 0o600);
+  try {
+    writeSync(fd, content, undefined, "utf-8");
+    fsyncSync(fd);
+  } finally {
+    closeSync(fd);
+  }
+  renameSync(tmp, filePath);
+}
+
 /**
  * Returns true if the given directory is a git repository.
  */
@@ -334,7 +362,7 @@ export function setSkillGlobal(skillDir: string, value: boolean): void {
   assertSafePath(skillDir);
   const skillMd = join(skillDir, "SKILL.md");
   if (!existsSync(skillMd)) {
-    writeFileSync(skillMd, `---\nname: ${basename(skillDir)}\nglobal: ${value}\n---\n`);
+    writeUtf8FileAtomic(skillMd, `---\nname: ${basename(skillDir)}\nglobal: ${value}\n---\n`);
     return;
   }
   let content = readFileSync(skillMd, "utf-8");
@@ -346,8 +374,8 @@ export function setSkillGlobal(skillDir: string, value: boolean): void {
       // Inject after opening ---
       content = content.replace(/^---\r?\n/, `---\nglobal: ${value}\n`);
     }
-    writeFileSync(skillMd, content);
+    writeUtf8FileAtomic(skillMd, content);
   } else {
-    writeFileSync(skillMd, `---\nglobal: ${value}\n---\n\n` + content);
+    writeUtf8FileAtomic(skillMd, `---\nglobal: ${value}\n---\n\n` + content);
   }
 }
