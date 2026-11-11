@@ -1,12 +1,8 @@
 import type {
   SandboxProvider, SandboxHandle, SandboxCreateOpts, ExecResult,
 } from "../sandbox";
-import {
-  assertDockerImageRef,
-  assertDockerResourceId,
-  buildDockerExecStartPath,
-  rebuildDockerApiPath,
-} from "../safe-input";
+import { assertDockerImageRef, assertDockerResourceId } from "../safe-input";
+import { buildDockerExecStartPath, rebuildDockerApiPath } from "../docker-api-path";
 
 interface DockerOpts {
   socket?: string;
@@ -49,14 +45,16 @@ export class DockerSandboxProvider implements SandboxProvider {
     this.defaultNetwork = opts.network ?? "none";
   }
 
-  private url(path: string): string {
-    return `http://localhost/v1.41${path}`;
-  }
+  private static readonly DOCKER_ENGINE = "http://127.0.0.1/v1.41";
 
   private async dockerFetch(path: string, init: RequestInit): Promise<Response> {
     const safePath = rebuildDockerApiPath(path);
-    return fetch(this.url(safePath), {
+    if (!/^\/[a-z0-9/?.=&_%-]+$/i.test(safePath)) {
+      throw new Error("Refusing unsafe Docker API path");
+    }
+    return fetch(DockerSandboxProvider.DOCKER_ENGINE + safePath, {
       ...init,
+      redirect: "error",
       // @ts-ignore — Bun extension: unix socket fetch
       unix: this.socket,
     });

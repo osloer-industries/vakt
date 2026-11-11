@@ -100,8 +100,6 @@ export function assertSafeSkillName(name: string): string {
 }
 
 export { assertGitRemoteUrl } from "./safe-input-git";
-import { assertDockerImageRef } from "./safe-input-oci";
-
 export {
   assertDockerImageRef,
   assertOciReference,
@@ -143,64 +141,6 @@ export function validateDockerApiPath(path: string): void {
       assertDockerResourceId(seg);
     }
   }
-}
-
-/** Build a validated Docker exec start API path from an engine exec id. */
-export function buildDockerExecStartPath(execId: string): string {
-  assertDockerResourceId(execId);
-  return rebuildDockerApiPath(`/exec/${execId.toLowerCase()}/start`);
-}
-
-function sanitizeDockerImageCreateQuery(query: string): string {
-  const params = new URLSearchParams(query);
-  const img = params.get("fromImage");
-  if (!img) {
-    throw new Error("Invalid Docker API path");
-  }
-  const decoded = decodeURIComponent(img);
-  assertDockerImageRef(decoded);
-  return `?${new URLSearchParams({ fromImage: decoded }).toString()}`;
-}
-
-/**
- * Rebuild a Docker Engine API path from validated segments (breaks taint for fetch URLs).
- */
-export function rebuildDockerApiPath(path: string): string {
-  const qIndex = path.indexOf("?");
-  const pathname = qIndex >= 0 ? path.slice(0, qIndex) : path;
-  validateDockerApiPath(pathname);
-  const segments = pathname.split("/").filter(Boolean);
-  const rebuilt: string[] = [];
-  for (let i = 0; i < segments.length; i++) {
-    const seg = segments[i]!;
-    const parent = segments[i - 1];
-    let safe = seg;
-    if (parent === "containers" && !DOCKER_PATH_LITERALS.has(seg)) {
-      assertDockerResourceId(seg);
-      safe = seg.toLowerCase();
-    } else if (parent === "exec" && seg !== "start") {
-      assertDockerResourceId(seg);
-      safe = seg.toLowerCase();
-    }
-    rebuilt.push(safe);
-  }
-  let out = `/${rebuilt.join("/")}`;
-  if (qIndex >= 0) {
-    const query = path.slice(qIndex + 1);
-    if (pathname === "/images/create") {
-      out += sanitizeDockerImageCreateQuery(query);
-    } else if (query === "force=true") {
-      out += "?force=true";
-    } else if (pathname === "/containers/json" && query.startsWith("filters=")) {
-      if (query.includes("..") || query.includes("\0")) {
-        throw new Error("Invalid Docker API path");
-      }
-      out += `?${query}`;
-    } else {
-      throw new Error("Invalid Docker API path");
-    }
-  }
-  return out;
 }
 
 const NPM_PKG = /^(?:@[\w.-]+\/)?[\w.-]+$/;
