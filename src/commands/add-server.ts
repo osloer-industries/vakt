@@ -5,6 +5,7 @@ import type { Command } from "commander";
 import { AGENTS_DIR, loadMcpConfig } from "../lib/config";
 import { RegistryClient } from "../lib/registry";
 import { verifyPackage } from "../lib/verify";
+import { sanitizeForLog } from "../lib/safe-input";
 import { PolicyEngine, loadMergedPolicy } from "../lib/policy";
 
 type StdioEntryOpts = { command: string; args: string[]; global: boolean };
@@ -120,7 +121,8 @@ async function handleRegistryServer(
   }
   if (resolved.requiredSecrets.length > 0) {
     console.log(`\nSecrets needed:`);
-    resolved.requiredSecrets.forEach(k => console.log(`  vakt secrets set ${k} <value>`));
+    resolved.requiredSecrets.forEach(k =>
+      console.log(`  vakt secrets set ${sanitizeForLog(k)} <value>`));
   }
 }
 

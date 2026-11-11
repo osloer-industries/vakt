@@ -1,6 +1,7 @@
 import type {
   SandboxProvider, SandboxHandle, SandboxCreateOpts, ExecResult,
 } from "../sandbox";
+import { assertDockerImageRef, assertDockerResourceId, validateDockerApiPath } from "../safe-input";
 
 interface DockerOpts {
   socket?: string;
@@ -48,6 +49,7 @@ export class DockerSandboxProvider implements SandboxProvider {
   }
 
   private async req<T>(method: string, path: string, body?: unknown): Promise<T> {
+    validateDockerApiPath(path);
     const res = await fetch(this.url(path), {
       method,
       // @ts-ignore — Bun extension: unix socket fetch
@@ -64,9 +66,11 @@ export class DockerSandboxProvider implements SandboxProvider {
   }
 
   private async pullImage(image: string): Promise<void> {
-    // POST /images/create?fromImage=<image> — streams JSON progress lines, we just drain it
+    assertDockerImageRef(image);
+    const apiPath = `/images/create?fromImage=${encodeURIComponent(image)}`;
+    validateDockerApiPath(apiPath.split("?")[0]!);
     const res = await fetch(
-      this.url(`/images/create?fromImage=${encodeURIComponent(image)}`),
+      this.url(apiPath),
       {
         method: "POST",
         // @ts-ignore
@@ -103,6 +107,7 @@ export class DockerSandboxProvider implements SandboxProvider {
     if (opts.name) body["Name"] = opts.name;
 
     const { Id } = await this.req<{ Id: string }>("POST", "/containers/create", body);
+    assertDockerResourceId(Id);
     await this.req("POST", `/containers/${Id}/start`);
     // Ensure /workspace always exists (may be empty if no repo bind-mounted)
     const handle = { id: Id, provider: this.name };
@@ -122,7 +127,10 @@ export class DockerSandboxProvider implements SandboxProvider {
       },
     );
 
-    const res = await fetch(this.url(`/exec/${execId}/start`), {
+    assertDockerResourceId(execId);
+    const execPath = `/exec/${execId}/start`;
+    validateDockerApiPath(execPath);
+    const res = await fetch(this.url(execPath), {
       method: "POST",
       // @ts-ignore
       unix: this.socket,

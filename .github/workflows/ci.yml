@@ -30,10 +30,10 @@ jobs:
         uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
 
       - name: Install dependencies
-        run: bun install --frozen-lockfile
+        run: bun install --frozen-lockfile --ignore-scripts
 
       - name: Type check
-        run: bunx tsc --noEmit
+        run: ./node_modules/.bin/tsc --noEmit
 
       - name: Validate JSON files
         run: |
@@ -92,7 +92,7 @@ jobs:
         uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
 
       - name: Install dependencies
-        run: bun install --frozen-lockfile
+        run: bun install --frozen-lockfile --ignore-scripts
 
       - name: Generate coverage report
         run: bun test --coverage --coverage-reporter lcov

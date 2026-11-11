@@ -1,6 +1,10 @@
 import { existsSync, readdirSync, readFileSync, writeFileSync, statSync } from "node:fs";
 import { join, basename } from "node:path";
 import { spawnSync } from "node:child_process";
+import { assertSafePath } from "./safe-input";
+import { requireExecutable, safeSpawnEnv } from "./safe-exec";
+
+export { assertSafePath } from "./safe-input";
 
 /**
  * Parse YAML frontmatter from a SKILL.md file.
@@ -245,7 +249,7 @@ export function isSkillClassified(skillDir: string): boolean {
  * whether a directory is itself a git repo.
  */
 function cleanGitEnv(): NodeJS.ProcessEnv {
-  const env = { ...process.env };
+  const env = safeSpawnEnv();
   delete env["GIT_DIR"];
   delete env["GIT_WORK_TREE"];
   delete env["GIT_INDEX_FILE"];
@@ -253,15 +257,8 @@ function cleanGitEnv(): NodeJS.ProcessEnv {
   return env;
 }
 
-/**
- * Validates that a path is safe to pass to spawnSync as a directory argument.
- * Rejects relative paths and paths containing shell metacharacters.
- * This makes the security intent explicit and addresses OS command injection hotspots.
- */
-export function assertSafePath(p: string): void {
-  if (!p.startsWith("/") || /[;&|`$<>]/.test(p)) {
-    throw new Error(`Unsafe path rejected: ${p}`);
-  }
+function gitBinary(): string {
+  return requireExecutable("git");
 }
 
 /**
@@ -269,7 +266,7 @@ export function assertSafePath(p: string): void {
  */
 export function isGitRepo(skillDir: string): boolean {
   assertSafePath(skillDir);
-  const result = spawnSync("git", ["-C", skillDir, "rev-parse", "--git-dir"], {
+  const result = spawnSync(gitBinary(), ["-C", skillDir, "rev-parse", "--git-dir"], {
     encoding: "utf-8",
     stdio: ["ignore", "pipe", "ignore"],
     env: cleanGitEnv(),
@@ -291,25 +288,25 @@ export function fetchAndCheckSkill(skillDir: string): SkillUpdateInfo | null {
   if (!isGitRepo(skillDir)) return null;
 
   // git fetch origin (silent — ignore errors if no network)
-  spawnSync("git", ["-C", skillDir, "fetch", "origin"], {
+  spawnSync(gitBinary(), ["-C", skillDir, "fetch", "origin"], {
     encoding: "utf-8",
     stdio: "ignore",
     env: cleanGitEnv(),
   });
 
   // Count commits behind
-  const behindResult = spawnSync( // NOSONAR — hardcoded "git" command, path validated by assertSafePath
-    "git", ["-C", skillDir, "rev-list", "--count", "HEAD..@{u}"],
-    { encoding: "utf-8", stdio: ["ignore", "pipe", "ignore"], env: cleanGitEnv() }
+  const behindResult = spawnSync(
+    gitBinary(), ["-C", skillDir, "rev-list", "--count", "HEAD..@{u}"],
+    { encoding: "utf-8", stdio: ["ignore", "pipe", "ignore"], env: cleanGitEnv() },
   );
   if (behindResult.status !== 0) return null;
   const behind = Number.parseInt(behindResult.stdout.trim(), 10);
   if (Number.isNaN(behind) || behind === 0) return null;
 
   // Get changed files summary
-  const filesResult = spawnSync( // NOSONAR — hardcoded "git" command, path validated by assertSafePath
-    "git", ["-C", skillDir, "diff", "--name-only", "HEAD..@{u}"],
-    { encoding: "utf-8", stdio: ["ignore", "pipe", "ignore"], env: cleanGitEnv() }
+  const filesResult = spawnSync(
+    gitBinary(), ["-C", skillDir, "diff", "--name-only", "HEAD..@{u}"],
+    { encoding: "utf-8", stdio: ["ignore", "pipe", "ignore"], env: cleanGitEnv() },
   );
   const files = (filesResult.stdout ?? "").trim().split("\n").filter(Boolean);
   const filesSummary = files.length <= 3
@@ -325,7 +322,7 @@ export function fetchAndCheckSkill(skillDir: string): SkillUpdateInfo | null {
  */
 export function pullSkill(skillDir: string): boolean {
   assertSafePath(skillDir);
-  const result = spawnSync("git", ["-C", skillDir, "pull", "--ff-only"], {
+  const result = spawnSync(gitBinary(), ["-C", skillDir, "pull", "--ff-only"], {
     encoding: "utf-8",
     stdio: ["ignore", "pipe", "pipe"],
     env: cleanGitEnv(),
@@ -334,12 +331,13 @@ export function pullSkill(skillDir: string): boolean {
 }
 
 export function setSkillGlobal(skillDir: string, value: boolean): void {
+  assertSafePath(skillDir);
   const skillMd = join(skillDir, "SKILL.md");
   if (!existsSync(skillMd)) {
     writeFileSync(skillMd, `---\nname: ${basename(skillDir)}\nglobal: ${value}\n---\n`);
     return;
   }
-  let content = readFileSync(skillMd, "utf-8"); // NOSONAR — path constrained to join(skillDir, "SKILL.md")
+  let content = readFileSync(skillMd, "utf-8");
   if (content.startsWith("---")) {
     if (content.includes("\nglobal:")) {
       // Replace existing global line
@@ -348,7 +346,7 @@ export function setSkillGlobal(skillDir: string, value: boolean): void {
       // Inject after opening ---
       content = content.replace(/^---\r?\n/, `---\nglobal: ${value}\n`);
     }
-    writeFileSync(skillMd, content); // NOSONAR — path constrained to join(skillDir, "SKILL.md")
+    writeFileSync(skillMd, content);
   } else {
     writeFileSync(skillMd, `---\nglobal: ${value}\n---\n\n` + content);
   }

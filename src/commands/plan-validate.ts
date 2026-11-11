@@ -1,5 +1,6 @@
 import type { Command } from "commander";
 import { existsSync, readFileSync } from "node:fs";
+import { resolveReadableFile } from "../lib/safe-input";
 import { AGENTS_DIR } from "../lib/config";
 import { loadMergedPolicy, PolicyEngine } from "../lib/policy";
 import { KNOWN_TOOLS } from "../lib/schemas";
@@ -143,9 +144,17 @@ export function registerPlanValidate(program: Command): void {
         process.exit(1);
       }
       
-      const planText = file
-        ? readFileSync(file, "utf-8")
-        : await readStdin();
+      let planText: string;
+      if (file) {
+        try {
+          planText = readFileSync(resolveReadableFile(file), "utf-8");
+        } catch (e) {
+          console.error(e instanceof Error ? e.message : String(e));
+          process.exit(1);
+        }
+      } else {
+        planText = await readStdin();
+      }
       
       if (!planText.trim()) {
         console.error("No plan content provided");
