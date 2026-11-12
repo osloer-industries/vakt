@@ -39,7 +39,7 @@
     "knip": "^6.43.0",
     "markdownlint-cli2": "^0.24.0",
     "semantic-release": "^25.0.9",
-    "typescript": "^7.0.2"
+    "typescript": "^5.9.3"
   },
   "repository": {
     "type": "git",
