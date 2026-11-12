@@ -7,6 +7,30 @@ export type VerifyResult =
   | { ok: false; reason: string };
 
 const NPM_REGISTRY = "https://registry.npmjs.org";
+const NPM_REGISTRY_HOST = "registry.npmjs.org";
+
+/** Fixed-base URL for npm attestations lookups (blocks SSRF via user input). */
+export function buildNpmAttestationsUrl(pkg: string, version?: string): URL {
+  if (version !== undefined && !/^[\w.+-]+$/.test(version)) {
+    throw new Error(`Invalid package version: ${version}`);
+  }
+  const encoded = encodeURIComponent(pkg);
+  const rel = version
+    ? `/-/npm/v1/attestations/${encoded}@${encodeURIComponent(version)}`
+    : `/-/npm/v1/attestations/${encoded}`;
+  const parsed = new URL(rel, NPM_REGISTRY);
+  const attestationsPrefix = "/-/npm/v1/attestations/";
+  if (
+    parsed.protocol !== "https:" ||
+    parsed.hostname !== NPM_REGISTRY_HOST ||
+    parsed.origin !== NPM_REGISTRY ||
+    !parsed.pathname.startsWith(attestationsPrefix) ||
+    parsed.pathname.includes("..")
+  ) {
+    throw new Error("Refusing non-registry npm URL");
+  }
+  return parsed;
+}
 
 function cmdAvailable(cmd: string): boolean {
   try {
@@ -55,17 +79,15 @@ export async function verifyNpm(identifier: string, version?: string): Promise<V
     return { ok: false, reason: `Invalid package version: ${version}` };
   }
 
-  const encoded = encodeURIComponent(pkg).replace(/%2F/gi, "%2F");
-  const versionStr = version ? `@${encodeURIComponent(version)}` : "";
-  const url = `${NPM_REGISTRY}/-/npm/v1/attestations/${encoded}${versionStr}`;
+  let requestUrl: URL;
+  try {
+    requestUrl = buildNpmAttestationsUrl(pkg, version);
+  } catch (e) {
+    return { ok: false, reason: e instanceof Error ? e.message : String(e) };
+  }
 
   try {
-    const parsed = new URL(url);
-    if (parsed.origin !== NPM_REGISTRY) {
-      return { ok: false, reason: "Refusing non-registry npm URL" };
-    }
-
-    const resp = await fetch(url, {
+    const resp = await fetch(requestUrl, {
       headers: { "User-Agent": "vakt-verify/1.0.0" },
       signal: AbortSignal.timeout(10000),
       redirect: "error",
