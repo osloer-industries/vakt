@@ -296,6 +296,20 @@ Automated via `semantic-release` on merge to `main`:
 
 Binary: `bun build src/index.ts --compile --outfile dist/vakt`
 
+## CI and security gates
+
+Workflow files under `.github/workflows/` combine **org reusables** with repo-specific jobs:
+
+| Workflow | Role |
+|----------|------|
+| `ci.yml` | `workflow-security` (org), Bun build/validate, SonarCloud, Docker e2e |
+| `codeql.yml` | JavaScript/TypeScript CodeQL via org reusable (weekly schedule + PR/push) |
+| `dependency-review.yml` | PR dependency review via org reusable |
+| `test.yml` | Cross-platform bats e2e, lint, unit tests, secret/permission checks |
+| `release.yml` | semantic-release on `main` |
+
+Reusable workflows are called from `osloer-industries/.github` at a full commit SHA with a `# main` comment. Do not use floating refs. Dependabot `github-actions` updates include those `uses:` pins. Repo-specific logic stays in this repository (Bun, bats, Docker harness); do not re-add local actionlint, zizmor, or CodeQL init/analyze steps.
+
 ## SonarCloud
 
 The SonarCloud project key is `tn819_agentctl` (legacy name — the repo was previously called `agentctl`).

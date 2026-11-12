@@ -1,24 +1,32 @@
-import { spawnSync } from "node:child_process";
+import { assertNpmPackageName } from "./safe-input";
+import { requireExecutable } from "./safe-exec";
+import { runCosignVerify, type CosignVerifyOutput } from "./verify-cosign";
 
 export type VerifyResult =
   | { ok: true; signer: string; source: string }
   | { ok: false; reason: string };
 
-const SAFE_PATH = "/usr/local/bin:/usr/bin:/bin:/opt/homebrew/bin";
+const NPM_REGISTRY = "https://registry.npmjs.org";
 
 function cmdAvailable(cmd: string): boolean {
-  const r = spawnSync("/usr/bin/which", [cmd], { encoding: "utf-8", env: { PATH: SAFE_PATH } });
-  return r.status === 0;
+  try {
+    requireExecutable(cmd);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 export function verifyOci(identifier: string): VerifyResult {
   if (!cmdAvailable("cosign")) {
     return { ok: false, reason: "cosign not installed (brew install cosign)" };
   }
-  const r = spawnSync("cosign", ["verify", identifier], {
-    encoding: "utf-8",
-    env: { ...(process.env as Record<string, string>), PATH: SAFE_PATH },
-  });
+  let r: CosignVerifyOutput;
+  try {
+    r = runCosignVerify(identifier);
+  } catch (e) {
+    return { ok: false, reason: e instanceof Error ? e.message : String(e) };
+  }
   if (r.status === 0) {
     let signer = "verified";
     try {
@@ -36,16 +44,31 @@ export function verifyOci(identifier: string): VerifyResult {
 }
 
 export async function verifyNpm(identifier: string, version?: string): Promise<VerifyResult> {
-  // Strip npx flags (e.g. "-y @scope/pkg" → "@scope/pkg")
-  const pkg = identifier.replace(/^-y\s+/, "").trim();
-  const encoded = pkg.replace(/\//g, "%2F");
-  const versionStr = version ? `@${version}` : "";
-  const url = `https://registry.npmjs.org/-/npm/v1/attestations/${encoded}${versionStr}`;
+  let pkg: string;
+  try {
+    pkg = assertNpmPackageName(identifier);
+  } catch (e) {
+    return { ok: false, reason: e instanceof Error ? e.message : String(e) };
+  }
+
+  if (version !== undefined && !/^[\w.+-]+$/.test(version)) {
+    return { ok: false, reason: `Invalid package version: ${version}` };
+  }
+
+  const encoded = encodeURIComponent(pkg).replace(/%2F/gi, "%2F");
+  const versionStr = version ? `@${encodeURIComponent(version)}` : "";
+  const url = `${NPM_REGISTRY}/-/npm/v1/attestations/${encoded}${versionStr}`;
 
   try {
+    const parsed = new URL(url);
+    if (parsed.origin !== NPM_REGISTRY) {
+      return { ok: false, reason: "Refusing non-registry npm URL" };
+    }
+
     const resp = await fetch(url, {
       headers: { "User-Agent": "vakt-verify/1.0.0" },
       signal: AbortSignal.timeout(10000),
+      redirect: "error",
     });
     if (!resp.ok) {
       if (resp.status === 404) return { ok: false, reason: `No attestations found for ${pkg}` };
@@ -58,7 +81,7 @@ export async function verifyNpm(identifier: string, version?: string): Promise<V
     const hasSLSA = attestations.some(
       (a) =>
         (a.predicateType ?? "").toLowerCase().includes("slsa") ||
-        (a.bundleMediaType ?? "").toLowerCase().includes("slsa")
+        (a.bundleMediaType ?? "").toLowerCase().includes("slsa"),
     );
     return {
       ok: true,
@@ -73,7 +96,7 @@ export async function verifyNpm(identifier: string, version?: string): Promise<V
 export async function verifyPackage(
   pkgType: "oci" | "npm" | "npx",
   identifier: string,
-  version?: string
+  version?: string,
 ): Promise<VerifyResult> {
   if (pkgType === "oci") return verifyOci(identifier);
   return verifyNpm(identifier, version);

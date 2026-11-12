@@ -2,6 +2,7 @@ import type { Command } from "commander";
 import { loadAgentConfig } from "../lib/config";
 import { AuditStore, defaultAuditDbPath } from "../lib/audit";
 import { DockerSandboxProvider } from "../lib/sandbox/docker";
+import { sanitizeForLog } from "../lib/safe-input";
 import type { SandboxProvider } from "../lib/sandbox";
 
 type AgentConfig = Awaited<ReturnType<typeof loadAgentConfig>>;
@@ -56,8 +57,8 @@ export function registerAgent(program: Command): void {
         process.stdout.write(sessionId + "\n");
       } else {
         console.log(`session   ${sessionId}`);
-        console.log(`container ${handle.id}`);
-        console.log(`provider  ${provider.name}`);
+        console.log(`container ${sanitizeForLog(handle.id)}`);
+        console.log(`provider  ${sanitizeForLog(provider.name)}`);
       }
     });
 

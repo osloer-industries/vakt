@@ -1,5 +1,8 @@
 name: Tests
 
+permissions:
+  contents: read
+
 on:
   push:
     branches: [main]
@@ -9,13 +12,15 @@ jobs:
   test-macos:
     runs-on: macos-latest
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
 
       - name: Setup Bun
-        uses: oven-sh/setup-bun@ecf28ddc73e819eb6fa29df6b34ef8921c743461 # v2
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
 
       - name: Install dependencies
-        run: bun install --frozen-lockfile
+        run: bun install --frozen-lockfile --ignore-scripts
 
       - name: Install bats
         run: brew install bats-core
@@ -25,9 +30,14 @@ jobs:
       # (test-linux below and CI docker-e2e in ci.yml).
       - name: Run e2e tests (excluding Docker sandbox suite)
         run: |
+          set -euo pipefail
           export PATH="$PWD/src:$HOME/.bun/bin:$PATH"
           export AGENTS_SECRETS_BACKEND=env
-          bats $(find tests/e2e -maxdepth 1 -name '*.bats' ! -name 'agent-docker.bats' | sort)
+          bats_files=()
+          while IFS= read -r file; do
+            bats_files+=("$file")
+          done < <(find tests/e2e -maxdepth 1 -name '*.bats' ! -name 'agent-docker.bats' | sort)
+          bats "${bats_files[@]}"
 
       - name: Build binary (smoke test prerequisite)
         run: bun build src/index.ts --compile --outfile dist/vakt
@@ -61,13 +71,15 @@ jobs:
   test-linux:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
 
       - name: Setup Bun
-        uses: oven-sh/setup-bun@ecf28ddc73e819eb6fa29df6b34ef8921c743461 # v2
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
 
       - name: Install dependencies
-        run: bun install --frozen-lockfile
+        run: bun install --frozen-lockfile --ignore-scripts
 
       - name: Install bats
         run: |
@@ -75,7 +87,7 @@ jobs:
           sudo apt-get install -y bats
 
       - name: Create kind cluster for Kata kubectl e2e
-        uses: helm/kind-action@a1b0e391336a6ee6713a0583f8c6240d70863de3 # v1.12.0
+        uses: helm/kind-action@1544676c07bb3570fcb70166beaa07c4528fd4aa # v1.15.1
         with:
           cluster_name: vakt-ci
 
@@ -128,7 +140,9 @@ jobs:
   lint:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
 
       - name: Check shell scripts
         run: |
@@ -141,13 +155,15 @@ jobs:
   test:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
 
       - name: Setup Bun
-        uses: oven-sh/setup-bun@ecf28ddc73e819eb6fa29df6b34ef8921c743461 # v2
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
 
       - name: Install dependencies
-        run: bun install --frozen-lockfile
+        run: bun install --frozen-lockfile --ignore-scripts
 
       - name: Run unit tests
         run: |
@@ -157,7 +173,9 @@ jobs:
   security:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
 
       - name: Check for hardcoded secrets
         run: |
