@@ -1,6 +1,6 @@
 // src/commands/sync.ts
 import { join } from "node:path";
-import { existsSync, readFileSync, writeFileSync, readdirSync, realpathSync, statSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync, readdirSync, realpathSync, statSync, mkdirSync, symlinkSync, copyFileSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 import type { Command } from "commander";
 import { loadMcpConfig, loadAgentConfig, loadProviders, resolveProviderConfigPath, expandHome, AGENTS_DIR } from "../lib/config";
@@ -285,6 +285,56 @@ function syncPermissions(providers: Provider[], policy: Policy | null, dryRun: b
   }
 }
 
+function writeInstructions(source: string, target: string, method: "symlink" | "copy"): void {
+  mkdirSync(join(target, ".."), { recursive: true });
+  if (method === "symlink") {
+    symlinkSync(source, target);
+    ok(`symlinked AGENTS.md → ${target}`);
+  } else {
+    copyFileSync(source, target);
+    ok(`copied AGENTS.md → ${target}`);
+  }
+}
+
+async function syncInstructionsToProviders(
+  providers: Provider[],
+  agentsDir: string,
+  dryRun: boolean,
+): Promise<void> {
+  const source = join(agentsDir, "AGENTS.md");
+  if (!existsSync(source)) {
+    info("No AGENTS.md found in ~/.agents — skipping instructions sync");
+    return;
+  }
+
+  console.log(`\n${bold("── Instructions ────────────────────────────────────────────")}`);
+
+  for (const provider of providers) {
+    if (!provider.instructions || !isInstalled(provider.detectCommand)) continue;
+
+    const platformPath = provider.instructions.path[process.platform as keyof typeof provider.instructions.path] ?? "";
+    const target = expandHome(platformPath);
+    if (!target) continue;
+
+    console.log(`\n  ${bold(provider.displayName)}  ${dim(`(${target})`)}`);
+
+    if (existsSync(target)) {
+      info(`skipped (exists): ${target}`);
+      continue;
+    }
+    if (dryRun) {
+      info(`[dry-run] Would ${provider.instructions.method} ${source} → ${target}`);
+      continue;
+    }
+
+    try {
+      writeInstructions(source, target, provider.instructions.method);
+    } catch (e) {
+      err(`failed for ${provider.displayName}: ${e}`);
+    }
+  }
+}
+
 async function syncSkillsToProviders(
   providers: Provider[],
   agentsDir: string,
@@ -565,6 +615,7 @@ export function registerSync(program: Command): void {
 
       if (!mcpOnly) {
         await syncSkillPhase(enabledProviders, agentsDir, dryRun, all, noUpdateSkills);
+        await syncInstructionsToProviders(enabledProviders, agentsDir, dryRun);
       }
 
       recordSyncAudit(enabledProviders, mcpConfig, dryRun);
