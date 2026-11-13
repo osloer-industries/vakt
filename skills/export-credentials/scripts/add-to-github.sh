@@ -16,7 +16,7 @@ STORE="${STORE:-auto}"
 SERVICE_NAME="${SERVICE_NAME:-credentials}"
 CREDENTIALS_JSON="${CREDENTIALS_JSON:-.detected-credentials.json}"
 
-if [ -z "$REPO" ]; then
+if [[ -z "$REPO" ]]; then
   echo "Usage: $0 <owner/repo> [--store keychain|pass|env] [--service SERVICE_NAME]" >&2
   exit 1
 fi
@@ -47,16 +47,16 @@ SKIP_AUDIT="${SKIP_AUDIT:-false}"
 
 # Load failed credentials from audit report if present
 AUDIT_FAILED=""
-if [ "$SKIP_AUDIT" != "true" ] && [ -f "$AUDIT_REPORT" ]; then
+if [[ "$SKIP_AUDIT" != "true" ]] && [[ -f "$AUDIT_REPORT" ]]; then
   AUDIT_FAILED=$(tr -d '\n\r ' < "$AUDIT_REPORT" | grep -o '"failed":\[[^]]*\]' | grep -o '"[A-Z_][A-Z0-9_]*"' | tr -d '"' | tr '\n' ' ' || true)
-  if [ -n "$AUDIT_FAILED" ]; then
+  if [[ -n "$AUDIT_FAILED" ]]; then
     echo "Audit report found — skipping failed credentials: $AUDIT_FAILED" >&2
   fi
 fi
 
 # Auto-detect credential store if needed
-if [ "$STORE" = "auto" ]; then
-  if command -v security >/dev/null 2>&1 && [ "$(uname)" = "Darwin" ]; then
+if [[ "$STORE" = "auto" ]]; then
+  if command -v security >/dev/null 2>&1 && [[ "$(uname)" = "Darwin" ]]; then
     STORE="keychain"
   elif command -v pass >/dev/null 2>&1; then
     STORE="pass"
@@ -75,7 +75,7 @@ if ! command -v gh >/dev/null 2>&1; then
   exit 1
 fi
 
-if [ ! -f "$CREDENTIALS_JSON" ]; then
+if [[ ! -f "$CREDENTIALS_JSON" ]]; then
   echo "✗ Error: $CREDENTIALS_JSON not found" >&2
   echo "ℹ Run detect-credentials.sh first to generate the credentials list" >&2
   exit 1
@@ -103,16 +103,20 @@ for cred_name in $CREDENTIALS; do
       cred_value=$(security find-generic-password -s "$SERVICE_NAME" -a "$cred_name" -w 2>/dev/null || echo "")
       ;;
     pass)
-      if [ -f "$HOME/.password-store/$cred_name.gpg" ]; then
+      if [[ -f "$HOME/.password-store/$cred_name.gpg" ]]; then
         cred_value=$(pass show "$cred_name" 2>/dev/null | head -1 || echo "")
       fi
       ;;
     env)
       cred_value="${!cred_name:-}"
       ;;
+    *)
+      echo "ERROR: Unknown credential store: $STORE" >&2
+      exit 1
+      ;;
   esac
 
-  if [ -z "$cred_value" ]; then
+  if [[ -z "$cred_value" ]]; then
     echo "✗ Failed to read $cred_name from $STORE" >&2
     FAIL_COUNT=$((FAIL_COUNT + 1))
     continue
@@ -143,7 +147,7 @@ cat > .github-secrets-result.json << EOF
 }
 EOF
 
-if [ $FAIL_COUNT -eq 0 ]; then
+if [[ $FAIL_COUNT -eq 0 ]]; then
   exit 0
 else
   exit 1

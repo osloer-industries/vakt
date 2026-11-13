@@ -77,6 +77,10 @@ install() {
       bash) comp_dir="$HOME/.bash_completion.d" ;;
       zsh)  comp_dir="$HOME/.zsh/completion" ;;
       fish) comp_dir="$HOME/.config/fish/completions" ;;
+      *)
+        echo "ERROR: unexpected shell for completion: $shell" >&2
+        exit 1
+        ;;
     esac
     if [[ -d "$(dirname "$comp_dir")" ]]; then
       mkdir -p "$comp_dir"
