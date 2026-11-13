@@ -128,6 +128,10 @@ secrets_delete() {
         mv "${secrets_file}.tmp" "$secrets_file"
       fi
       ;;
+    *)
+      echo "ERROR: Unknown secrets backend: $backend" >&2
+      return 1
+      ;;
   esac
 }
 
@@ -149,6 +153,10 @@ secrets_list() {
       if [[ -f "$secrets_file" ]]; then
         cut -d'=' -f1 "$secrets_file"
       fi
+      ;;
+    *)
+      echo "ERROR: Unknown secrets backend: $backend" >&2
+      return 1
       ;;
   esac
 }

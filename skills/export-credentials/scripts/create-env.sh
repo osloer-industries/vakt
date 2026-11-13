@@ -37,14 +37,14 @@ while [[ $# -gt 1 ]]; do
   esac
 done
 
-if [ ! -f "$CREDENTIALS_JSON" ]; then
+if [[ ! -f "$CREDENTIALS_JSON" ]]; then
   echo "Error: $CREDENTIALS_JSON not found" >&2
   exit 1
 fi
 
 # Auto-detect credential store if needed
-if [ "$STORE" = "auto" ]; then
-  if command -v security >/dev/null 2>&1 && [ "$(uname)" = "Darwin" ]; then
+if [[ "$STORE" = "auto" ]]; then
+  if command -v security >/dev/null 2>&1 && [[ "$(uname)" = "Darwin" ]]; then
     STORE="keychain"
   elif command -v pass >/dev/null 2>&1; then
     STORE="pass"
@@ -84,16 +84,20 @@ for cred_name in $CREDENTIALS; do
       cred_value=$(security find-generic-password -s "$SERVICE_NAME" -a "$cred_name" -w 2>/dev/null || echo "")
       ;;
     pass)
-      if [ -f "$HOME/.password-store/$cred_name.gpg" ]; then
+      if [[ -f "$HOME/.password-store/$cred_name.gpg" ]]; then
         cred_value=$(pass show "$cred_name" 2>/dev/null | head -1 || echo "")
       fi
       ;;
     env)
       cred_value="${!cred_name:-}"
       ;;
+    *)
+      echo "ERROR: Unknown credential store: $STORE" >&2
+      exit 1
+      ;;
   esac
 
-  if [ -z "$cred_value" ]; then
+  if [[ -z "$cred_value" ]]; then
     echo "✗ Failed to read $cred_name from $STORE" >&2
     continue
   fi
@@ -110,7 +114,7 @@ echo "⚠️  This file contains secrets! Never commit it." >&2
 echo "⚠️  Add '.env.local' to your .gitignore" >&2
 
 # Verify file exists and is readable
-if [ -f "$OUTPUT_FILE" ] && [ -r "$OUTPUT_FILE" ]; then
+if [[ -f "$OUTPUT_FILE" ]] && [[ -r "$OUTPUT_FILE" ]]; then
   exit 0
 else
   echo "✗ Failed to create $OUTPUT_FILE" >&2
