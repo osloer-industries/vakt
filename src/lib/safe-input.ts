@@ -125,11 +125,7 @@ export function assertSafeSkillName(name: string): string {
 }
 
 export { assertGitRemoteUrl } from "./safe-input-git";
-export {
-  assertDockerImageRef,
-  assertOciReference,
-  validatedOciReference,
-} from "./safe-input-oci";
+export { assertDockerImageRef, assertOciReference } from "./safe-input-oci";
 
 const DOCKER_ID = /^[a-f0-9]{12,64}$/i;
 
