@@ -4,9 +4,32 @@
 
 `vakt` is an enterprise MCP server and skills manager that syncs approved servers and policies across all AI coding tools (Claude Code, Cursor, Windsurf, Gemini CLI, Codex, OpenCode). It provides central policy, secrets management, audit logging, a skills registry, and supply chain verification — with zero infrastructure overhead.
 
+## Agent workflow (org-wide, keep identical across osloer-industries repos)
+
+These rules apply to every agent (Cursor, Grok Bot, any other) working in this repo.
+
+### Quality
+- Never cut corners on quality or architecture. Fix root causes. No `continue-on-error`, `|| true`, skipped or deleted tests, lowered thresholds, ignore or suppress comments, `NOSONAR`, exclusions, new lint/Sonar rule exceptions or overrides, audit ignores, `--legacy-peer-deps`, or `--force`.
+- SonarCloud issues are resolved only by fixing code, never by marking them false positive or won't-fix.
+- Scripts are TypeScript on Node 24, never Python.
+- `AGENTS.md` is the only agent instruction file; never add `CLAUDE.md` or tool-specific rule files.
+
+### CI and workflows
+- Pin GitHub Actions by full commit SHA with an accurate version comment. Org reusables from `osloer-industries/.github` are pinned `@<full sha> # v0.x.y` (a release tag, never `# main`).
+- Every CI job feeds the single `ci-passed` aggregate job, including Workflow security, CodeQL and the SonarCloud zero-issues job. `ci-passed` is the only required status check.
+- Only Dependabot patch/minor bumps and patch/minor release PRs auto-merge. Majors (or pre-1.0 breaking changes) never auto-merge; they wait for a human.
+- Run the repo's linters, tests and pre-commit checks locally before pushing. The pre-commit hook is never skipped (`--no-verify` is not allowed).
+- Push, then stop: do not wait on, watch or poll CI. Failures are handed back to you.
+
+### Pull requests
+- Keep PRs focused and reviewable, link the issues they close, and prefer simplification (less code, fewer dependencies, removed duplication).
+- Resolve conflicts by merging the base branch in. Never rebase a pushed branch, never force-push, never bypass branch protection.
+- A PR is ready for review only when all of these hold: it has no conflicts and is up to date with `main`; every check on the current head is green (pending is not ready); and it has no unresolved review threads, requested changes or open SonarCloud issues. Fix anything short of that yourself. Ask a human only when a real decision or ambiguity needs one.
+- Never touch secrets, permissions, repo settings or rulesets without explicit human approval.
+
 ## Language: TypeScript + Bun
 
-**vakt is written in TypeScript, compiled and run with Bun. No Python. No shell scripts in `src/` except `src/vakt.sh` (CLI shim) and `src/lib/secrets.sh` (legacy bash backend).**
+**vakt is written in TypeScript, compiled and run with Bun** (not Node as the application runtime). No shell scripts in `src/` except `src/vakt.sh` (CLI shim) and `src/lib/secrets.sh` (legacy bash backend).
 
 - All source code in `src/` is `.ts`
 - Bun is the runtime, test runner, and bundler
@@ -296,7 +319,9 @@ Automated via `semantic-release` on merge to `main`:
 
 Binary: `bun build src/index.ts --compile --outfile dist/vakt`
 
-## CI and security gates
+## CI and security gates (repo-specific)
+
+Org-wide CI rules (Action pinning, `ci-passed`, Dependabot auto-merge, local pre-commit, push-then-stop) are in **Agent workflow** above.
 
 Workflow files under `.github/workflows/` combine **org reusables** with repo-specific jobs:
 
@@ -308,7 +333,7 @@ Workflow files under `.github/workflows/` combine **org reusables** with repo-sp
 | `test.yml` | Cross-platform bats e2e, lint, unit tests, secret/permission checks |
 | `release.yml` | semantic-release on `main` |
 
-Reusable workflows are called from `osloer-industries/.github` at a full commit SHA with a `# main` comment. Do not use floating refs. Dependabot `github-actions` updates include those `uses:` pins. Repo-specific logic stays in this repository (Bun, bats, Docker harness); do not re-add local actionlint, zizmor, or CodeQL init/analyze steps.
+Repo-specific logic stays in this repository (Bun, bats, Docker harness); do not re-add local actionlint, zizmor, or CodeQL init/analyze steps.
 
 ## SonarCloud
 
