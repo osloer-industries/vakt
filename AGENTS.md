@@ -308,7 +308,7 @@ Workflow files under `.github/workflows/` combine **org reusables** with repo-sp
 | `test.yml` | Cross-platform bats e2e, lint, unit tests, secret/permission checks |
 | `release.yml` | semantic-release on `main` |
 
-Reusable workflows are called from `osloer-industries/.github` at a full commit SHA with a `# main` comment. Do not use floating refs. Dependabot `github-actions` updates include those `uses:` pins. Repo-specific logic stays in this repository (Bun, bats, Docker harness); do not re-add local actionlint, zizmor, or CodeQL init/analyze steps.
+Reusable workflows are called from `osloer-industries/.github` at a full commit SHA with a `# v0.x.y` tag comment matching the released org version (never `# main`). Do not use floating refs. Dependabot `github-actions` updates include those `uses:` pins (grouped as `osloer-reusables`). Repo-specific logic stays in this repository (Bun, bats, Docker harness); do not re-add local actionlint, zizmor, or CodeQL init/analyze steps.
 
 ## SonarCloud
 
