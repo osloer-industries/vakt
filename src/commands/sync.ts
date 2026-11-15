@@ -12,6 +12,7 @@ import { makePermissionsAdapter } from "../lib/permissions";
 import { syncPolicyHooks } from "../lib/policy-hooks";
 import { AuditStore } from "../lib/audit";
 import { resolveAll, formatForProvider, writeJsonConfig, writeTomlConfig, syncSkills } from "../lib/resolver";
+import { ensureProviderAgentsMd } from "../lib/instructions";
 import { fetchRemotePolicy, fetchRemoteMcpConfig, mergeRemoteMcp } from "../lib/remote";
 import type { AgentConfig } from "../lib/schemas";
 import type { ResolvedConfig } from "../lib/resolver";
@@ -282,6 +283,55 @@ function syncPermissions(providers: Provider[], policy: Policy | null, dryRun: b
     console.log(`\n  ${bold(provider.displayName)}`);
     syncProviderPermissions(provider, allow, deny, dryRun);
     syncProviderHooks(provider, policy, dryRun);
+  }
+}
+
+async function syncInstructionsToProviders(
+  providers: Provider[],
+  agentsDir: string,
+  dryRun: boolean,
+): Promise<void> {
+  const source = join(agentsDir, "AGENTS.md");
+  if (!existsSync(source)) {
+    info("No ~/.agents/AGENTS.md — skipping AGENTS.md instruction sync");
+    return;
+  }
+
+  console.log(`\n${bold("── AGENTS.md ───────────────────────────────────────────────")}`);
+
+  for (const provider of providers) {
+    if (!provider.instructions || !isInstalled(provider.detectCommand)) continue;
+
+    const platformPath = provider.instructions.path[process.platform as keyof typeof provider.instructions.path] ?? "";
+    const target = expandHome(platformPath);
+    if (!target) continue;
+
+    console.log(`\n  ${bold(provider.displayName)}  ${dim(`(${target})`)}`);
+
+    if (dryRun) {
+      info(`[dry-run] Would ${provider.instructions.method} ${source} → ${target}`);
+      continue;
+    }
+
+    try {
+      const action = ensureProviderAgentsMd(source, target, provider.instructions.method, dryRun);
+      switch (action) {
+        case "linked":
+          ok(`linked AGENTS.md`);
+          break;
+        case "refreshed":
+          ok(`refreshed AGENTS.md link`);
+          break;
+        case "skipped":
+          info("unchanged");
+          break;
+        case "blocked":
+          warn(`skipped (existing file — move content to ${source} and remove ${target} to symlink)`);
+          break;
+      }
+    } catch (e) {
+      err(`failed: ${e instanceof Error ? e.message : String(e)}`);
+    }
   }
 }
 
@@ -559,6 +609,10 @@ export function registerSync(program: Command): void {
         const configToSync = all ? mcpConfig : filterGlobal(mcpConfig);
         const { resolved, allMissing } = await resolveAll(configToSync, userConfig.paths);
         await syncMcpServers(enabledProviders, resolved, allMissing, withProxy, dryRun);
+      }
+
+      if (!mcpOnly) {
+        await syncInstructionsToProviders(enabledProviders, agentsDir, dryRun);
       }
 
       syncPermissions(enabledProviders, policy, dryRun);
