@@ -262,8 +262,9 @@ Resolved at sync time by `resolveSecretRefs()` in `src/lib/secrets.ts`:
 4. For each enabled provider: `resolveAll()` → inject secrets, expand `{{paths.*}}`
 5. `formatForProvider()` → map to provider-specific field names
 6. `writeJsonConfig()` (JSON) or `toToml()` (Codex TOML) → write to provider path
-7. `syncSkills()` → symlink `~/.agents/skills/*/` into provider skills dir
-8. Exception — Claude (`syncMethod: "cli"`): run `claude mcp remove` + `claude mcp add` instead of file write
+7. `syncInstructionsToProviders()` → symlink `~/.agents/AGENTS.md` to provider `AGENTS.md` paths (registry `instructions`; not CLAUDE.md/GEMINI.md)
+8. `syncSkills()` → symlink `~/.agents/skills/*/` into provider skills dir
+9. Exception — Claude (`syncMethod: "cli"`): run `claude mcp remove` + `claude mcp add` instead of file write
 
 ## Adding a New Command
 
