@@ -14,7 +14,7 @@ concurrency:
 
 jobs:
   workflow-security:
-    uses: osloer-industries/.github/.github/workflows/workflow-security.yml@d4865a4b2c70c8433188f5200beac104b1c7fe86 # main
+    uses: osloer-industries/.github/.github/workflows/workflow-security.yml@d1fd7700ad30c0bafbe1d0e4b1eac1fbbb4137b3 # v0.1.2
     permissions:
       contents: read
       actions: read
