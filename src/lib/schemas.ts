@@ -259,6 +259,14 @@ export const ProviderSchema = z
       method: z.enum(["symlink", "native"]),
     }),
     /**
+     * AGENTS.md standard — symlink or copy ~/.agents/AGENTS.md to the provider path.
+     * Use AGENTS.md filenames only (not CLAUDE.md / GEMINI.md). Cursor uses rules hooks instead.
+     */
+    instructions: z.object({
+      path: PlatformStringMapSchema,
+      method: z.enum(["symlink", "copy"]),
+    }).optional(),
+    /**
      * Path to the provider's native permissions config file, keyed by platform.
      * When present and policy.tools is non-empty, vakt sync writes a managed
      * block to this file. Absent = no permissions-file target for this provider.
