@@ -1,5 +1,9 @@
 import { describe, expect, it } from "bun:test";
-import { buildNpmAttestationsUrl, verifyNpm } from "../../src/lib/verify";
+import {
+  buildNpmAttestationsUrl,
+  npmAttestationIndicatesSlsa,
+  verifyNpm,
+} from "../../src/lib/verify";
 
 describe("buildNpmAttestationsUrl", () => {
   it("fixes attestations requests to registry.npmjs.org", () => {
@@ -12,6 +16,18 @@ describe("buildNpmAttestationsUrl", () => {
   it("rejects invalid versions before building a URL", () => {
     expect(() => buildNpmAttestationsUrl("pkg", "../../../evil")).toThrow(
       "Invalid package version",
+    );
+  });
+});
+
+describe("npmAttestationIndicatesSlsa", () => {
+  it("detects SLSA in predicateType or bundleMediaType", () => {
+    expect(npmAttestationIndicatesSlsa({ predicateType: "https://slsa.dev/provenance/v1" })).toBe(
+      true,
+    );
+    expect(npmAttestationIndicatesSlsa({ bundleMediaType: "application/vnd.slsa+json" })).toBe(true);
+    expect(npmAttestationIndicatesSlsa({ predicateType: "other", bundleMediaType: "other" })).toBe(
+      false,
     );
   });
 });
