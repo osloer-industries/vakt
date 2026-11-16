@@ -38,6 +38,14 @@
         "win32": "%USERPROFILE%\\.config\\opencode\\skills"
       },
       "method": "symlink"
+    },
+    "instructions": {
+      "path": {
+        "darwin": "$HOME/.config/opencode/AGENTS.md",
+        "linux": "$HOME/.config/opencode/AGENTS.md",
+        "win32": "%USERPROFILE%\\.config\\opencode\\AGENTS.md"
+      },
+      "method": "symlink"
     }
   },
 
@@ -87,7 +95,15 @@
       "linux": "$HOME/.claude/settings.json",
       "win32": "%USERPROFILE%\\.claude\\settings.json"
     },
-    "permissionsFormat": "claude-settings"
+    "permissionsFormat": "claude-settings",
+    "instructions": {
+      "path": {
+        "darwin": "$HOME/.claude/AGENTS.md",
+        "linux": "$HOME/.claude/AGENTS.md",
+        "win32": "%USERPROFILE%\\.claude\\AGENTS.md"
+      },
+      "method": "symlink"
+    }
   },
 
   "gemini": {
@@ -152,6 +168,14 @@
         "darwin": "$HOME/.codex/skills",
         "linux": "$HOME/.codex/skills",
         "win32": "%USERPROFILE%\\.codex\\skills"
+      },
+      "method": "symlink"
+    },
+    "instructions": {
+      "path": {
+        "darwin": "$HOME/.codex/AGENTS.md",
+        "linux": "$HOME/.codex/AGENTS.md",
+        "win32": "%USERPROFILE%\\.codex\\AGENTS.md"
       },
       "method": "symlink"
     }
@@ -227,6 +251,13 @@
       "path": {
         "darwin": "$HOME/.vibe/skills",
         "linux": "$HOME/.vibe/skills"
+      },
+      "method": "symlink"
+    },
+    "instructions": {
+      "path": {
+        "darwin": "$HOME/.vibe/AGENTS.md",
+        "linux": "$HOME/.vibe/AGENTS.md"
       },
       "method": "symlink"
     }
