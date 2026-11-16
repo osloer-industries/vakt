@@ -262,8 +262,9 @@ Resolved at sync time by `resolveSecretRefs()` in `src/lib/secrets.ts`:
 4. For each enabled provider: `resolveAll()` → inject secrets, expand `{{paths.*}}`
 5. `formatForProvider()` → map to provider-specific field names
 6. `writeJsonConfig()` (JSON) or `toToml()` (Codex TOML) → write to provider path
-7. `syncSkills()` → symlink `~/.agents/skills/*/` into provider skills dir
-8. Exception — Claude (`syncMethod: "cli"`): run `claude mcp remove` + `claude mcp add` instead of file write
+7. `syncInstructionsToProviders()` → symlink `~/.agents/AGENTS.md` to provider `AGENTS.md` paths (registry `instructions`; not CLAUDE.md/GEMINI.md)
+8. `syncSkills()` → symlink `~/.agents/skills/*/` into provider skills dir
+9. Exception — Claude (`syncMethod: "cli"`): run `claude mcp remove` + `claude mcp add` instead of file write
 
 ## Adding a New Command
 
@@ -308,7 +309,7 @@ Workflow files under `.github/workflows/` combine **org reusables** with repo-sp
 | `test.yml` | Cross-platform bats e2e, lint, unit tests, secret/permission checks |
 | `release.yml` | semantic-release on `main` |
 
-Reusable workflows are called from `osloer-industries/.github` at a full commit SHA with a `# main` comment. Do not use floating refs. Dependabot `github-actions` updates include those `uses:` pins. Repo-specific logic stays in this repository (Bun, bats, Docker harness); do not re-add local actionlint, zizmor, or CodeQL init/analyze steps.
+Reusable workflows are called from `osloer-industries/.github` at a full commit SHA with a `# v0.x.y` tag comment matching the released org version (never `# main`). Do not use floating refs. Dependabot `github-actions` updates include those `uses:` pins (grouped as `osloer-reusables`). Repo-specific logic stays in this repository (Bun, bats, Docker harness); do not re-add local actionlint, zizmor, or CodeQL init/analyze steps.
 
 ## SonarCloud
 
