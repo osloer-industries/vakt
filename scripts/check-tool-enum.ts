@@ -59,8 +59,8 @@ function extractToolNames(html: string): Set<string> {
 
 function diff(known: readonly string[], found: Set<string>): { added: string[]; removed: string[] } {
   const knownSet = new Set(known);
-  const added   = [...found].filter((t) => !knownSet.has(t)).sort();
-  const removed = [...known].filter((t) => !found.has(t)).sort();
+  const added   = [...found].filter((t) => !knownSet.has(t)).sort((a, b) => a.localeCompare(b));
+  const removed = [...known].filter((t) => !found.has(t)).sort((a, b) => a.localeCompare(b));
   return { added, removed };
 }
 

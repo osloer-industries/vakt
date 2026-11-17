@@ -5,6 +5,7 @@ import type { Command } from "commander";
 import { AGENTS_DIR, loadMcpConfig } from "../lib/config";
 import { RegistryClient } from "../lib/registry";
 import { verifyPackage } from "../lib/verify";
+import { sanitizeForLog } from "../lib/safe-input";
 import { PolicyEngine, loadMergedPolicy } from "../lib/policy";
 
 type StdioEntryOpts = { command: string; args: string[]; global: boolean };
@@ -86,13 +87,13 @@ async function handleRegistryServer(
   
   if (!vResult.ok) {
     if (registryPolicy === "registry-only") {
-      console.error(red(`✗ Verification failed for ${firstArg}:`));
-      console.error(red(`  ${vResult.reason}`));
+      console.error(red(`✗ Verification failed for ${sanitizeForLog(firstArg)}:`));
+      console.error(red(`  ${sanitizeForLog(vResult.reason)}`));
       console.error(red(`\nServer not added. Set policy.registryPolicy to "warn-unverified" or "allow-unverified" to proceed.`));
       process.exit(1);
     } else if (registryPolicy === "warn-unverified") {
-      console.log(yellow(`⚠ Warning: ${firstArg} could not be verified`));
-      console.log(yellow(`  ${vResult.reason}`));
+      console.log(yellow(`⚠ Warning: ${sanitizeForLog(firstArg)} could not be verified`));
+      console.log(yellow(`  ${sanitizeForLog(vResult.reason)}`));
     }
   }
   
@@ -120,7 +121,8 @@ async function handleRegistryServer(
   }
   if (resolved.requiredSecrets.length > 0) {
     console.log(`\nSecrets needed:`);
-    resolved.requiredSecrets.forEach(k => console.log(`  vakt secrets set ${k} <value>`));
+    resolved.requiredSecrets.forEach(k =>
+      console.log(`  vakt secrets set ${sanitizeForLog(k)} <value>`));
   }
 }
 

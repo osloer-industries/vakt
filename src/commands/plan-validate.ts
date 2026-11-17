@@ -1,5 +1,6 @@
 import type { Command } from "commander";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync } from "node:fs";
+import { readBoundedUtf8File, userPathRoots } from "../lib/safe-input";
 import { AGENTS_DIR } from "../lib/config";
 import { loadMergedPolicy, PolicyEngine } from "../lib/policy";
 import { KNOWN_TOOLS } from "../lib/schemas";
@@ -143,9 +144,13 @@ export function registerPlanValidate(program: Command): void {
         process.exit(1);
       }
       
-      const planText = file
-        ? readFileSync(file, "utf-8")
-        : await readStdin();
+      let planText: string;
+      try {
+        planText = await loadPlanContent(file);
+      } catch (e) {
+        console.error(e instanceof Error ? e.message : String(e));
+        process.exit(1);
+      }
       
       if (!planText.trim()) {
         console.error("No plan content provided");
@@ -190,6 +195,13 @@ export function registerPlanValidate(program: Command): void {
         process.exit(1);
       }
     });
+}
+
+async function loadPlanContent(file: string | undefined): Promise<string> {
+  if (!file) {
+    return readStdin();
+  }
+  return readBoundedUtf8File(file, userPathRoots(AGENTS_DIR));
 }
 
 function readStdin(): Promise<string> {
