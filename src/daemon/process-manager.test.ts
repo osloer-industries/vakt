@@ -28,6 +28,6 @@ describe("ProcessManager", () => {
 
   it("throws when starting an unknown server", async () => {
     const pm = new ProcessManager({}, {});
-    expect(pm.start("nonexistent")).rejects.toThrow();
+    await expect(pm.start("nonexistent")).rejects.toThrow();
   });
 });
