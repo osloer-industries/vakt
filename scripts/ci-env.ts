@@ -1,21 +1,36 @@
 import { execFileSync, type ExecFileSyncOptions } from "node:child_process";
 import { existsSync } from "node:fs";
+import { dirname } from "node:path";
 import { homedir } from "node:os";
 
 /** PATH pinned for CI child processes (Sonar rule typescript:S4036). */
 export const CI_SAFE_PATH =
   "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin";
 
+export type CiExecFileOptions = Pick<
+  ExecFileSyncOptions,
+  "stdio" | "env" | "encoding"
+> & {
+  /** Extra directories prepended to the pinned PATH (e.g. dir containing `bun`). */
+  pathPrefix?: string;
+};
+
 export function ciExecFile(
   file: string,
   args: string[],
-  options: Pick<ExecFileSyncOptions, "stdio" | "env" | "encoding"> = {
+  options: CiExecFileOptions = {
     stdio: "inherit",
   },
 ): string | undefined {
-  const extraEnv = options.env ?? {};
-  const env = { ...process.env, ...extraEnv, PATH: CI_SAFE_PATH };
-  return execFileSync(file, args, { ...options, env }) as string | undefined;
+  const { pathPrefix, env: extraEnv = {}, ...execOptions } = options;
+  const pathParts = [pathPrefix, CI_SAFE_PATH].filter(
+    (part): part is string => part !== undefined && part.length > 0,
+  );
+  const env = { ...process.env, ...extraEnv, PATH: pathParts.join(":") };
+  return execFileSync(file, args, {
+    ...execOptions,
+    env,
+  }) as string | undefined;
 }
 
 const BIN_CANDIDATES: Record<string, string[]> = {
