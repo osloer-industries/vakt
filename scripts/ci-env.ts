@@ -1,6 +1,5 @@
 import { execFileSync, type ExecFileSyncOptions } from "node:child_process";
 import { existsSync } from "node:fs";
-import { dirname } from "node:path";
 import { homedir } from "node:os";
 
 /** PATH pinned for CI child processes (Sonar rule typescript:S4036). */
