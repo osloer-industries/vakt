@@ -143,7 +143,7 @@ jobs:
           persist-credentials: false
           fetch-depth: 0
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
-      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.2.1
+      - uses: actions/cache@0c907a75c2c80ebcb7f088228285e798b750cf8f # v4.2.1
         with:
           path: reports/stryker-incremental.json
           key: stryker-incremental-${{ runner.os }}-${{ github.ref_name }}-${{ hashFiles('bun.lock', 'stryker.config.mjs') }}

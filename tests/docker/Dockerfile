@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1
 FROM debian:bookworm-slim
 
-ARG BUN_VERSION=1.3.10
+ARG BUN_VERSION=1.4.4
 ARG BUN_SHA256=f57bc0187e39623de716ba3a389fda5486b2d7be7131a980ba54dc7b733d2e08
 
 # ── System dependencies ───────────────────────────────────────────────────────
