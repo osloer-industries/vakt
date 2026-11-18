@@ -328,10 +328,9 @@ Workflow files under `.github/workflows/` combine **org reusables** with repo-sp
 
 | Workflow | Role |
 |----------|------|
-| `ci.yml` | `workflow-security` (org), Bun build/validate, SonarCloud, Docker e2e |
-| `codeql.yml` | JavaScript/TypeScript CodeQL via org reusable (weekly schedule + PR/push) |
+| `ci.yml` | Org gates (`workflow-security`, CodeQL, Sonar analyze + zero-issues, `ci-passed`), Bun build/validate, Docker e2e, cross-platform bats e2e, lint, unit tests, security checks |
 | `dependency-review.yml` | PR dependency review via org reusable |
-| `test.yml` | Cross-platform bats e2e, lint, unit tests, secret/permission checks |
+| `pr-title.yml` | Semantic pull request titles via org reusable |
 | `release.yml` | semantic-release on `main` |
 
 Reusable workflows are called from `osloer-industries/.github` at a full commit SHA with a `# v0.x.y` tag comment matching the released org version (never `# main`). Do not use floating refs. Dependabot `github-actions` updates include those `uses:` pins (grouped as `osloer-reusables`). Repo-specific logic stays in this repository (Bun, bats, Docker harness); do not re-add local actionlint, zizmor, or CodeQL init/analyze steps.

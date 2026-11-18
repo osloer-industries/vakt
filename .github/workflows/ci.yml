@@ -2,11 +2,14 @@ name: CI
 
 permissions:
   contents: read
+  actions: read
 
 on:
   push:
     branches: [main]
   pull_request:
+  schedule:
+    - cron: "17 3 * * 1"
 
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
@@ -18,6 +21,13 @@ jobs:
     permissions:
       contents: read
       actions: read
+
+  codeql:
+    uses: osloer-industries/.github/.github/workflows/codeql-javascript-typescript.yml@348b254ef112f4f8e239a41e7adb3f3e2dac3944 # v0.1.6
+    permissions:
+      contents: read
+      actions: read
+      security-events: write
 
   build:
     runs-on: ubuntu-latest
@@ -77,31 +87,27 @@ jobs:
           grep -q "#!/usr/bin/env bash" install.sh
           grep -q "curl" install.sh || grep -q "git clone" install.sh
 
-  sonarcloud:
+  sonar-analyze:
+    uses: osloer-industries/.github/.github/workflows/sonarqube-cloud-node.yml@348b254ef112f4f8e239a41e7adb3f3e2dac3944 # v0.1.6
     permissions:
       contents: read
       pull-requests: read
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-        with:
-          fetch-depth: 0
-          persist-credentials: false
+    with:
+      package-manager: bun
+      coverage-npm-script: test:coverage
+      timeout-minutes: 20
+    secrets:
+      SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
 
-      - name: Setup Bun
-        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
-
-      - name: Install dependencies
-        run: bun install --frozen-lockfile --ignore-scripts
-
-      - name: Generate coverage report
-        run: bun test --coverage --coverage-reporter lcov
-
-      - name: SonarCloud Scan
-        uses: SonarSource/sonarqube-scan-action@e805d875275f728fac1885b413934be6d7c63f65 # v8.4.1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+  sonar-zero-open-issues:
+    if: github.event_name == 'pull_request'
+    needs: sonar-analyze
+    uses: osloer-industries/.github/.github/workflows/sonarcloud-zero-issues.yml@348b254ef112f4f8e239a41e7adb3f3e2dac3944 # v0.1.6
+    with:
+      project-key: tn819_agentctl
+      ce-task-id: ${{ needs.sonar-analyze.outputs.ce-task-id }}
+    secrets:
+      SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
 
   docker-e2e:
     runs-on: ubuntu-latest
@@ -122,3 +128,201 @@ jobs:
       - name: Dump container logs on failure
         if: failure()
         run: docker compose -f tests/docker/docker-compose.yml logs
+
+  test-macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile --ignore-scripts
+
+      - name: Install bats
+        run: brew install bats-core
+
+      - name: Run e2e tests (excluding Docker sandbox suite)
+        run: |
+          set -euo pipefail
+          export PATH="$PWD/src:$HOME/.bun/bin:$PATH"
+          export AGENTS_SECRETS_BACKEND=env
+          bats_files=()
+          while IFS= read -r file; do
+            bats_files+=("$file")
+          done < <(find tests/e2e -maxdepth 1 -name '*.bats' ! -name 'agent-docker.bats' | sort)
+          bats "${bats_files[@]}"
+
+      - name: Build binary (smoke test prerequisite)
+        run: bun build src/index.ts --compile --outfile dist/vakt
+
+      - name: Run binary smoke tests
+        run: |
+          export AGENTS_SECRETS_BACKEND=env
+          bats tests/e2e/binary.bats
+
+      - name: Test CLI commands
+        run: |
+          export PATH="$HOME/.bun/bin:$PATH"
+          export AGENTS_DIR="$HOME/.agents-test"
+          export AGENTS_SECRETS_BACKEND=env
+
+          bun run src/index.ts init
+          [ -d "$AGENTS_DIR" ]
+          [ -f "$AGENTS_DIR/config.json" ]
+
+          bun run src/index.ts config list
+          bun run src/index.ts config set paths.code ~/Projects
+
+          bun run src/index.ts secrets set TEST_KEY "test_value"
+          [ "$(bun run src/index.ts secrets get TEST_KEY)" = "test_value" ]
+
+          bun run src/index.ts add-server test npx -y test-mcp
+          bun run src/index.ts list servers | grep -q "test"
+
+          bun run src/index.ts list
+
+  test-linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile --ignore-scripts
+
+      - name: Install bats
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y bats
+
+      - name: Create kind cluster for Kata kubectl e2e
+        uses: helm/kind-action@ea822c7bf1874f08e5a491df991c228edffc3376 # v1.15.2
+        with:
+          cluster_name: vakt-ci
+
+      - name: Setup Docker
+        run: |
+          if ! docker info &>/dev/null; then
+            echo "Starting Docker daemon..."
+            sudo systemctl start docker
+            sleep 5
+          fi
+          docker info
+          docker run --rm hello-world
+
+      - name: Run e2e tests
+        run: |
+          export PATH="$PWD/src:$HOME/.bun/bin:$PATH"
+          export AGENTS_SECRETS_BACKEND=env
+          bats tests/e2e/
+
+      - name: Build binary (smoke test prerequisite)
+        run: bun build src/index.ts --compile --outfile dist/vakt
+
+      - name: Run binary smoke tests
+        run: |
+          export AGENTS_SECRETS_BACKEND=env
+          bats tests/e2e/binary.bats
+
+      - name: Test CLI commands
+        run: |
+          export PATH="$HOME/.bun/bin:$PATH"
+          export AGENTS_DIR="$HOME/.agents-test"
+          export AGENTS_SECRETS_BACKEND=env
+
+          bun run src/index.ts init
+          [ -d "$AGENTS_DIR" ]
+          [ -f "$AGENTS_DIR/config.json" ]
+
+          bun run src/index.ts config list
+          bun run src/index.ts config set paths.code ~/Projects
+
+          bun run src/index.ts secrets set TEST_KEY "test_value"
+          [ "$(bun run src/index.ts secrets get TEST_KEY)" = "test_value" ]
+
+          bun run src/index.ts add-server test npx -y test-mcp
+          bun run src/index.ts list servers | grep -q "test"
+
+          bun run src/index.ts list
+
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+
+      - name: Check shell scripts
+        run: |
+          find . -name "*.sh" -type f -exec bash -n {} \;
+
+      - name: Check for TODO/FIXME
+        run: |
+          ! grep -r "TODO\|FIXME" src/ --include="*.ts" || (echo "Found TODO/FIXME comments" && exit 1)
+
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile --ignore-scripts
+
+      - name: Run unit tests
+        run: |
+          export AGENTS_SECRETS_BACKEND=env
+          bun test src/
+
+  security:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+
+      - name: Check for hardcoded secrets
+        run: |
+          ! grep -rE "(password|token|api_key|secret)\s*=\s*['\"][^'\"]{10,}['\"]" src/ --include="*.ts" || (echo "Found hardcoded credentials" && exit 1)
+          ! grep -rE "(ghp|gho|github_pat)_[a-zA-Z0-9]{36}" src/ --include="*.ts" || (echo "Found hardcoded GitHub tokens" && exit 1)
+
+      - name: Check file permissions
+        run: |
+          world_writable=$(find . -type f -perm -002 -not -path "./.git/*" 2>/dev/null)
+          if [ -n "$world_writable" ]; then
+            echo "Found world-writable files:"
+            echo "$world_writable"
+            exit 1
+          fi
+          echo "✓ No world-writable files found"
+
+  ci-passed:
+    name: ci-passed
+    needs:
+      - workflow-security
+      - build
+      - docker-e2e
+      - test-macos
+      - test-linux
+      - lint
+      - test
+      - security
+      - codeql
+      - sonar-analyze
+      - sonar-zero-open-issues
+    if: always()
+    uses: osloer-industries/.github/.github/workflows/ci-passed.yml@348b254ef112f4f8e239a41e7adb3f3e2dac3944 # v0.1.6
+    with:
+      needs-json: ${{ toJSON(needs) }}
