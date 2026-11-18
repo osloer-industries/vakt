@@ -35,7 +35,7 @@ export const StdioServerSchema = z.object({
 
 export const HttpServerSchema = z.object({
   transport: z.literal("http"),
-  url: z.string().url(),
+  url: z.url(),
   headers: z.record(z.string(), z.string()).optional(),
   global: z.boolean().default(false),
 });
@@ -57,24 +57,22 @@ export const McpConfigSchema = z.preprocess(
 // ── Raw provider config files ─────────────────────────────────────────────────
 // Schema for a single server entry as it appears in a provider's config file
 // (before normalisation to McpServer). Fields are a superset of all known
-// provider formats; unknown fields are passed through via .passthrough().
+// provider formats; unknown fields are passed through via looseObject.
 
-export const RawProviderServerSchema = z
-  .object({
-    // Stdio fields
-    command: z.union([z.string(), z.array(z.string())]).optional(),
-    args: z.array(z.string()).optional(),
-    env: z.record(z.string(), z.string()).optional(),
-    cwd: z.string().optional(),
-    // HTTP fields — various provider conventions
-    url: z.string().optional(),
-    httpUrl: z.string().optional(),
-    serverUrl: z.string().optional(),
-    headers: z.record(z.string(), z.string()).optional(),
-    // Type discriminator used by some providers (e.g. "http", "local", "remote")
-    type: z.string().optional(),
-  })
-  .passthrough();
+export const RawProviderServerSchema = z.looseObject({
+  // Stdio fields
+  command: z.union([z.string(), z.array(z.string())]).optional(),
+  args: z.array(z.string()).optional(),
+  env: z.record(z.string(), z.string()).optional(),
+  cwd: z.string().optional(),
+  // HTTP fields — various provider conventions
+  url: z.string().optional(),
+  httpUrl: z.string().optional(),
+  serverUrl: z.string().optional(),
+  headers: z.record(z.string(), z.string()).optional(),
+  // Type discriminator used by some providers (e.g. "http", "local", "remote")
+  type: z.string().optional(),
+});
 
 
 // ── Remote config ─────────────────────────────────────────────────────────────
