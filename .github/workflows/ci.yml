@@ -86,8 +86,7 @@ jobs:
           grep -q "#!/usr/bin/env bash" install.sh
           grep -q "curl" install.sh || grep -q "git clone" install.sh
 
-  sonarcloud:
-    name: sonarcloud
+  sonar-scan:
     uses: osloer-industries/.github/.github/workflows/sonarqube-cloud-node.yml@348b254ef112f4f8e239a41e7adb3f3e2dac3944 # v0.1.6
     permissions:
       contents: read
@@ -99,13 +98,55 @@ jobs:
     secrets:
       SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
 
+  sonarcloud:
+    name: sonarcloud
+    needs: sonar-scan
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      - name: Confirm Sonar compute-engine analysis succeeded
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          CE_TASK_ID: ${{ needs.sonar-scan.outputs.ce-task-id }}
+        run: |
+          set -euo pipefail
+          if [ -z "${SONAR_TOKEN:-}" ]; then
+            echo "SONAR_TOKEN not configured; skipping Sonar verification (fork/Dependabot PR)."
+            exit 0
+          fi
+          if [ -z "${CE_TASK_ID:-}" ]; then
+            echo "::error::sonar-scan did not produce ce-task-id"
+            exit 1
+          fi
+          deadline=$((SECONDS + 1200))
+          while [ "$SECONDS" -lt "$deadline" ]; do
+            response="$(curl -fsSL -u "${SONAR_TOKEN}:" \
+              "https://sonarcloud.io/api/ce/task?id=${CE_TASK_ID}")"
+            status="$(printf '%s' "$response" | node -e 'const j=JSON.parse(require("fs").readFileSync(0,"utf8")); process.stdout.write(j.task?.status ?? "")')"
+            if [ "$status" = "SUCCESS" ]; then
+              echo "Sonar analysis task ${CE_TASK_ID} succeeded."
+              exit 0
+            fi
+            if [ "$status" = "FAILED" ] || [ "$status" = "CANCELED" ]; then
+              echo "::error::Sonar analysis task ${CE_TASK_ID} ended with status ${status}"
+              exit 1
+            fi
+            sleep 10
+          done
+          echo "::error::Timed out waiting for Sonar task ${CE_TASK_ID}"
+          exit 1
+
   sonar-zero-open-issues:
     if: github.event_name == 'pull_request'
-    needs: sonarcloud
+    needs:
+      - sonar-scan
+      - sonarcloud
     uses: osloer-industries/.github/.github/workflows/sonarcloud-zero-issues.yml@348b254ef112f4f8e239a41e7adb3f3e2dac3944 # v0.1.6
     with:
       project-key: tn819_agentctl
-      ce-task-id: ${{ needs.sonarcloud.outputs.ce-task-id }}
+      ce-task-id: ${{ needs.sonar-scan.outputs.ce-task-id }}
     secrets:
       SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
 
@@ -320,6 +361,7 @@ jobs:
       - test
       - security
       - codeql
+      - sonar-scan
       - sonarcloud
       - sonar-zero-open-issues
     if: always()
