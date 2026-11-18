@@ -167,7 +167,7 @@ jobs:
           set -euo pipefail
           pm="reusables/.github/actions/package-manager/package-manager.ts"
           bun "$pm" validate
-          NPM_CI_IGNORE_SCRIPTS=true bun "$pm" install
+          bun install --frozen-lockfile --ignore-scripts
       - name: Mutation (changed src on pull request)
         if: github.event_name == 'pull_request'
         env:
