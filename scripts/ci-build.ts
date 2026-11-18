@@ -1,7 +1,8 @@
 #!/usr/bin/env node
-import { lstatSync, readFileSync, readdirSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { ciExecFile, resolveCiBinary } from "./ci-env.ts";
+import { walkRepoFiles } from "./ci-fs.ts";
 
 const TscJs = join(process.cwd(), "node_modules", "typescript", "lib", "tsc.js");
 const NodeBin = process.execPath;
@@ -10,48 +11,9 @@ const Python3Bin = resolveCiBinary("python3");
 const BunBin = resolveCiBinary("bun");
 const ChmodBin = resolveCiBinary("chmod");
 
-function walkFiles(
-  root: string,
-  extension: string,
-  skipNodeModules: boolean,
-): string[] {
-  const results: string[] = [];
-  const stack = [root];
-  while (stack.length > 0) {
-    const dir = stack.pop();
-    if (dir === undefined) {
-      continue;
-    }
-    let entries: string[];
-    try {
-      entries = readdirSync(dir);
-    } catch {
-      continue;
-    }
-    for (const entry of entries) {
-      const full = join(dir, entry);
-      let stat;
-      try {
-        stat = lstatSync(full);
-      } catch {
-        continue;
-      }
-      if (stat.isDirectory()) {
-        if (skipNodeModules && entry === "node_modules") {
-          continue;
-        }
-        stack.push(full);
-      } else if (entry.endsWith(extension)) {
-        results.push(full);
-      }
-    }
-  }
-  return results;
-}
-
 ciExecFile(NodeBin, [TscJs, "--noEmit"]);
 
-for (const file of walkFiles(".", ".json", true)) {
+for (const file of walkRepoFiles(".", { extensions: [".json"] })) {
   try {
     JSON.parse(readFileSync(file, "utf8"));
   } catch (error) {
@@ -70,7 +32,7 @@ for (const file of readdirSync(workflowDir).filter((f) => f.endsWith(".yml"))) {
   ]);
 }
 
-for (const file of walkFiles(".", ".sh", true)) {
+for (const file of walkRepoFiles(".", { extensions: [".sh"] })) {
   ciExecFile(BashBin, ["-n", file]);
 }
 

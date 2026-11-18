@@ -34,6 +34,12 @@ Org-wide gates (actionlint, zizmor, CodeQL init/analyze, dependency review) call
 
 **Jobs:** org reusable `semantic-pull-request.yml` (Conventional Commits titles).
 
+### Auto-merge (`auto-merge.yml`)
+
+**Triggers:** Pull request open/sync/reopen/ready for review
+
+**Jobs:** org reusable `auto-merge.yml` — Dependabot patch/minor only (majors blocked in org eligibility script). `allow-release-prs: false` because vakt uses semantic-release on `main`, not Release Please PRs.
+
 ### Release (`release.yml`)
 
 **Triggers:** Push to `main`, manual `workflow_dispatch`
@@ -56,6 +62,7 @@ bats tests/
 ### Required Secrets
 
 - `SONAR_TOKEN` — SonarCloud analysis and zero-issues gate
+- `RELEASE_APP_PRIVATE_KEY` — org auto-merge (osloer-reviewer app); with repo variable `OSLOER_RELEASE_APP_ID`
 - Release workflow additionally uses `RELEASE_PAT` where documented in `release.yml`
 
 ## Monitoring

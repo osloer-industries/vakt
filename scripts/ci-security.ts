@@ -1,33 +1,17 @@
 #!/usr/bin/env node
-import { readFileSync, readdirSync, statSync } from "node:fs";
-import { join } from "node:path";
+import { readFileSync, statSync } from "node:fs";
+import { walkRepoFiles } from "./ci-fs.ts";
 
 const hardcodedCredential =
   /(password|token|api_key|secret)\s*=\s*['"][^'"]{10,}['"]/;
 const githubToken = /(ghp|gho|github_pat)_[a-zA-Z0-9]{36}/;
 
-function walkTypeScriptFiles(root: string): string[] {
-  const results: string[] = [];
-  const stack = [root];
-  while (stack.length > 0) {
-    const dir = stack.pop();
-    if (dir === undefined) {
-      continue;
-    }
-    for (const entry of readdirSync(dir)) {
-      const full = join(dir, entry);
-      const stat = statSync(full);
-      if (stat.isDirectory()) {
-        stack.push(full);
-      } else if (entry.endsWith(".ts")) {
-        results.push(full);
-      }
-    }
-  }
-  return results;
-}
+const emptySkip = new Set<string>();
 
-for (const file of walkTypeScriptFiles("src")) {
+for (const file of walkRepoFiles("src", {
+  extensions: [".ts"],
+  skipDirNames: emptySkip,
+})) {
   const content = readFileSync(file, "utf8");
   if (hardcodedCredential.test(content)) {
     throw new Error(`Found hardcoded credentials in ${file}`);
@@ -38,36 +22,15 @@ for (const file of walkTypeScriptFiles("src")) {
 }
 
 const worldWritable: string[] = [];
-const stack = ["."];
-while (stack.length > 0) {
-  const dir = stack.pop();
-  if (dir === undefined) {
+for (const file of walkRepoFiles(".")) {
+  let stat;
+  try {
+    stat = statSync(file);
+  } catch {
     continue;
   }
-  for (const entry of readdirSync(dir)) {
-    if (entry === ".git" || entry === "node_modules") {
-      continue;
-    }
-    if (
-      entry === "node_modules" ||
-      entry === "dist" ||
-      entry === ".git" ||
-      entry === "coverage"
-    ) {
-      continue;
-    }
-    const full = join(dir, entry);
-    let stat;
-    try {
-      stat = statSync(full);
-    } catch {
-      continue;
-    }
-    if (stat.isDirectory()) {
-      stack.push(full);
-    } else if ((stat.mode & 0o002) !== 0) {
-      worldWritable.push(full);
-    }
+  if ((stat.mode & 0o002) !== 0) {
+    worldWritable.push(file);
   }
 }
 
