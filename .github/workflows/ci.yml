@@ -131,61 +131,11 @@ jobs:
           echo "Security gate passed."
 
   mutation:
-    name: Mutation
-    runs-on: ubuntu-latest
-    # Local full-src run: ~49s (bun runner + perTest); 10m leaves headroom for CI install/sandbox.
-    timeout-minutes: 10
-    permissions:
-      contents: read
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-          fetch-depth: 0
-      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
-      - uses: actions/cache@0c907a75c2c80ebcb7f088228285e798b750cf8f # v4.2.1
-        with:
-          path: reports/stryker-incremental.json
-          key: stryker-incremental-${{ runner.os }}-${{ github.ref_name }}-${{ hashFiles('bun.lock', 'stryker.config.mjs') }}
-          restore-keys: |
-            stryker-incremental-${{ runner.os }}-${{ github.ref_name }}-
-            stryker-incremental-${{ runner.os }}-main-
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          repository: osloer-industries/.github
-          ref: 348b254ef112f4f8e239a41e7adb3f3e2dac3944 # v0.1.6
-          path: reusables
-          sparse-checkout: |
-            .github/scripts
-            .github/actions/package-manager
-          sparse-checkout-cone-mode: true
-          persist-credentials: false
-      - name: Install dependencies
-        env:
-          PACKAGE_MANAGER: bun
-        run: |
-          set -euo pipefail
-          pm="reusables/.github/actions/package-manager/package-manager.ts"
-          bun "$pm" validate
-          bun install --frozen-lockfile --ignore-scripts
-      - name: Mutation (changed src on pull request)
-        if: github.event_name == 'pull_request'
-        env:
-          MUTATION_BASE_REF: ${{ github.event.pull_request.base.sha }}
-          MUTATION_REPO_ROOT: ${{ github.workspace }}
-          PACKAGE_MANAGER: bun
-        run: |
-          set -euo pipefail
-          bun reusables/.github/scripts/run-mutation-changed.ts
-      - name: Mutation (full src on default branch)
-        if: github.event_name == 'push'
-        env:
-          PACKAGE_MANAGER: bun
-          NPM_SCRIPT: test:mutation
-        run: |
-          set -euo pipefail
-          pm="reusables/.github/actions/package-manager/package-manager.ts"
-          bun "$pm" run
+    uses: osloer-industries/.github/.github/workflows/mutation-changed.yml@348b254ef112f4f8e239a41e7adb3f3e2dac3944 # v0.1.6
+    with:
+      package-manager: bun
+      full-npm-script: test:mutation
+      timeout-minutes: 10
 
   agents-md-lint:
     uses: osloer-industries/.github/.github/workflows/agents-md-lint.yml@348b254ef112f4f8e239a41e7adb3f3e2dac3944 # v0.1.6

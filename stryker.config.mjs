@@ -10,8 +10,6 @@ export default {
   coverageAnalysis: "perTest",
   ignoreStatic: true,
   concurrency: 4,
-  incremental: true,
-  incrementalFile: "reports/stryker-incremental.json",
   bun: {
     timeout: 120_000,
   },
