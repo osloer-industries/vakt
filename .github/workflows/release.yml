@@ -1,3 +1,5 @@
+# Versioning uses semantic-release (pre-1.0 policy, compiled Linux/macOS assets).
+# Org release-please.yml does not cover @semantic-release/exec binary publish; see PR notes.
 name: Release
 
 on:

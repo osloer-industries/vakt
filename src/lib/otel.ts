@@ -14,7 +14,7 @@ export async function initOtel(endpoint?: string): Promise<void> {
   if (endpoint) {
     // Lazy-load the full SDK — only pay the cost when actually configured
     const { NodeSDK }           = await import("@opentelemetry/sdk-node");
-    const { OTLPTraceExporter } = await import("@opentelemetry/exporter-otlp-grpc");
+    const { OTLPTraceExporter } = await import("@opentelemetry/exporter-trace-otlp-grpc");
 
     const sdk = new NodeSDK({
       serviceName:   "vakt",

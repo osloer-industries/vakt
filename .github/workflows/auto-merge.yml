@@ -1,0 +1,20 @@
+name: Auto-merge
+
+permissions:
+  contents: read
+  pull-requests: read
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+
+jobs:
+  auto-merge:
+    uses: osloer-industries/.github/.github/workflows/auto-merge.yml@348b254ef112f4f8e239a41e7adb3f3e2dac3944 # v0.1.6
+    secrets:
+      RELEASE_APP_PRIVATE_KEY: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
+    with:
+      release-app-id: ${{ vars.OSLOER_RELEASE_APP_ID }}
+      merge-method: squash
+      allow-release-prs: false
+      allow-dependabot: true
