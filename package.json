@@ -30,7 +30,7 @@
   "devDependencies": {
     "@commitlint/cli": "^19.0.0",
     "@commitlint/config-conventional": "^19.0.0",
-    "@hughescr/stryker-bun-runner": "1.6.0",
+    "@stryker-mutator/bun-runner": "npm:@hughescr/stryker-bun-runner@1.6.0",
     "@semantic-release/changelog": "^6.0.3",
     "@semantic-release/exec": "^6.0.3",
     "@semantic-release/git": "^10.0.1",

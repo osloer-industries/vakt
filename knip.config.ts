@@ -1,8 +1,6 @@
 import type { KnipConfig } from "knip";
 
 const config: KnipConfig = {
-  // Stryker loads runners via stryker.config.mjs (command + @hughescr/stryker-bun-runner).
-  ignore: ["stryker.config.mjs"],
   // entry inferred from package.json bin field (src/index.ts)
   // scripts/*.ts are standalone bun run scripts
   // test files are entry points for bun test
@@ -23,8 +21,6 @@ const config: KnipConfig = {
     "@semantic-release/exec",
     "@semantic-release/github",
     "conventional-changelog-conventionalcommits",
-    // Stryker loads via appendPlugins in stryker.config.mjs (ignored by knip)
-    "@hughescr/stryker-bun-runner",
   ],
 };
 

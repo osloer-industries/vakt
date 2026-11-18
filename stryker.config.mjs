@@ -1,8 +1,11 @@
 // @ts-check
-/** @type {import('@stryker-mutator/api/core').PartialStrykerOptions} */
+import "@stryker-mutator/bun-runner";
+
+/** @type {import("@stryker-mutator/core").PartialStrykerOptions} */
 export default {
   packageManager: "npm",
-  appendPlugins: ["@hughescr/stryker-bun-runner"],
+  appendPlugins: ["@stryker-mutator/bun-runner"],
+  plugins: ["@stryker-mutator/bun-runner"],
   testRunner: "bun",
   reporters: ["clear-text", "progress"],
   tsconfigFile: "tsconfig.json",
