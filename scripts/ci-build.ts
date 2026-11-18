@@ -1,11 +1,9 @@
 #!/usr/bin/env node
-import { execSync } from "node:child_process";
-import { readFileSync, readdirSync, statSync } from "node:fs";
+import { execFileSync } from "node:child_process";
+import { lstatSync, readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 
-function run(command: string): void {
-  execSync(command, { stdio: "inherit" });
-}
+const TscBin = join(process.cwd(), "node_modules", ".bin", "tsc");
 
 function walkFiles(
   root: string,
@@ -19,9 +17,20 @@ function walkFiles(
     if (dir === undefined) {
       continue;
     }
-    for (const entry of readdirSync(dir)) {
+    let entries: string[];
+    try {
+      entries = readdirSync(dir);
+    } catch {
+      continue;
+    }
+    for (const entry of entries) {
       const full = join(dir, entry);
-      const stat = statSync(full);
+      let stat;
+      try {
+        stat = lstatSync(full);
+      } catch {
+        continue;
+      }
       if (stat.isDirectory()) {
         if (skipNodeModules && entry === "node_modules") {
           continue;
@@ -35,20 +44,29 @@ function walkFiles(
   return results;
 }
 
-run("./node_modules/.bin/tsc --noEmit");
+execFileSync(TscBin, ["--noEmit"], { stdio: "inherit" });
 
 for (const file of walkFiles(".", ".json", true)) {
-  run(`python3 -m json.tool "${file}" > /dev/null`);
+  try {
+    JSON.parse(readFileSync(file, "utf8"));
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    throw new Error(`Invalid JSON in ${file}: ${message}`);
+  }
 }
 
-for (const file of readdirSync(".github/workflows").filter((f) => f.endsWith(".yml"))) {
-  run(
-    `python3 -c 'import yaml, sys; yaml.safe_load(open(sys.argv[1]))' ".github/workflows/${file}"`,
+const workflowDir = join(".github", "workflows");
+for (const file of readdirSync(workflowDir).filter((f) => f.endsWith(".yml"))) {
+  const workflowPath = join(workflowDir, file);
+  execFileSync(
+    "python3",
+    ["-c", "import yaml, sys; yaml.safe_load(open(sys.argv[1]))", workflowPath],
+    { stdio: "inherit" },
   );
 }
 
 for (const file of walkFiles(".", ".sh", true)) {
-  run(`bash -n "${file}"`);
+  execFileSync("bash", ["-n", file], { stdio: "inherit" });
 }
 
 for (const skillDir of readdirSync("skills", { withFileTypes: true }).filter((d) =>
@@ -56,26 +74,25 @@ for (const skillDir of readdirSync("skills", { withFileTypes: true }).filter((d)
 )) {
   const skillPath = join("skills", skillDir.name);
   const skillMd = join(skillPath, "SKILL.md");
+  let content: string;
   try {
-    statSync(skillMd);
+    content = readFileSync(skillMd, "utf8");
   } catch {
     throw new Error(`Missing SKILL.md in ${skillPath}/`);
   }
-  const content = readFileSync(skillMd, "utf8");
   if (!content.startsWith("---") && !content.includes("\n---")) {
     throw new Error(`Missing YAML frontmatter in ${skillMd}`);
   }
 }
 
-run("bun run src/index.ts --version");
-run("bun run src/index.ts --help");
+execFileSync("bun", ["src/index.ts", "--version"], { stdio: "inherit" });
+execFileSync("bun", ["src/index.ts", "--help"], { stdio: "inherit" });
 
-run("chmod +x install.sh");
+execFileSync("chmod", ["+x", "install.sh"], { stdio: "inherit" });
 const installSh = readFileSync("install.sh", "utf8");
 if (!installSh.includes("#!/usr/bin/env bash")) {
   throw new Error("install.sh missing bash shebang");
 }
-const installBody = installSh;
-if (!installBody.includes("curl") && !installBody.includes("git clone")) {
+if (!installSh.includes("curl") && !installSh.includes("git clone")) {
   throw new Error("install.sh missing curl or git clone");
 }
