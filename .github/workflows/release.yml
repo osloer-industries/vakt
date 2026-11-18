@@ -1,3 +1,5 @@
+# Versioning uses semantic-release (pre-1.0 policy, compiled Linux/macOS assets).
+# Org release-please.yml does not cover @semantic-release/exec binary publish; see PR notes.
 name: Release
 
 on:
@@ -30,7 +32,7 @@ jobs:
       released: ${{ steps.tag-check.outputs.released }}
       version: ${{ steps.tag-check.outputs.version }}
     steps:
-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           fetch-depth: 0
           persist-credentials: false
@@ -50,7 +52,7 @@ jobs:
           sudo apt-get install -y bats
 
       - name: Create kind cluster for Kata kubectl e2e
-        uses: helm/kind-action@1544676c07bb3570fcb70166beaa07c4528fd4aa # v1.15.1
+        uses: helm/kind-action@ea822c7bf1874f08e5a491df991c228edffc3376 # v1.15.2
         with:
           cluster_name: vakt-ci
 
@@ -124,7 +126,7 @@ jobs:
     needs: release
     if: needs.release.outputs.released == 'true'
     steps:
-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           ref: v${{ needs.release.outputs.version }}
           persist-credentials: false
@@ -162,7 +164,7 @@ jobs:
     needs: [release, release-macos]
     if: needs.release.outputs.released == 'true'
     steps:
-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           # Check out main so the formula commit is based on the current branch
           # tip. Pushing directly from a detached tag fails GH006 (status checks
@@ -192,6 +194,7 @@ jobs:
           VERSION: ${{ needs.release.outputs.version }}
         run: |
           set -euo pipefail
+          git remote set-url origin "https://x-access-token:${GH_TOKEN}@github.com/${{ github.repository }}.git"
           BRANCH="chore/formula-${VERSION}"
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
