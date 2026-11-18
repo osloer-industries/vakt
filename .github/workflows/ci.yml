@@ -21,7 +21,7 @@ jobs:
       contents: read
       actions: read
 
-  build:
+  build-check:
     uses: osloer-industries/.github/.github/workflows/node-npm-quality.yml@348b254ef112f4f8e239a41e7adb3f3e2dac3944 # v0.1.6
     with:
       package-manager: bun
@@ -29,26 +29,106 @@ jobs:
       check-npm-script: ci:build
       timeout-minutes: 15
 
-  lint:
+  build:
+    name: build
+    needs: [build-check]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - name: Aggregate build gate
+        env:
+          CHECK_RESULT: ${{ needs.build-check.result }}
+        run: |
+          set -euo pipefail
+          if [ "${CHECK_RESULT}" != "success" ]; then
+            echo "::error::build-check result was ${CHECK_RESULT}; expected success"
+            exit 1
+          fi
+          echo "Build gate passed."
+
+  lint-check:
     uses: osloer-industries/.github/.github/workflows/node-npm-quality.yml@348b254ef112f4f8e239a41e7adb3f3e2dac3944 # v0.1.6
     with:
       package-manager: bun
       job-name: lint
       check-npm-script: ci:lint
 
-  test:
+  lint:
+    name: lint
+    needs: [lint-check]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - name: Aggregate lint gate
+        env:
+          CHECK_RESULT: ${{ needs.lint-check.result }}
+        run: |
+          set -euo pipefail
+          if [ "${CHECK_RESULT}" != "success" ]; then
+            echo "::error::lint-check result was ${CHECK_RESULT}; expected success"
+            exit 1
+          fi
+          echo "Lint gate passed."
+
+  test-check:
     uses: osloer-industries/.github/.github/workflows/node-npm-quality.yml@348b254ef112f4f8e239a41e7adb3f3e2dac3944 # v0.1.6
     with:
       package-manager: bun
       job-name: test
       check-npm-script: ci:test
 
-  security:
+  test:
+    name: test
+    needs: [test-check]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - name: Aggregate test gate
+        env:
+          CHECK_RESULT: ${{ needs.test-check.result }}
+        run: |
+          set -euo pipefail
+          if [ "${CHECK_RESULT}" != "success" ]; then
+            echo "::error::test-check result was ${CHECK_RESULT}; expected success"
+            exit 1
+          fi
+          echo "Test gate passed."
+
+  security-check:
     uses: osloer-industries/.github/.github/workflows/node-npm-quality.yml@348b254ef112f4f8e239a41e7adb3f3e2dac3944 # v0.1.6
     with:
       package-manager: bun
       job-name: security
       check-npm-script: ci:security
+
+  security:
+    name: security
+    needs: [security-check]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - name: Aggregate security gate
+        env:
+          CHECK_RESULT: ${{ needs.security-check.result }}
+        run: |
+          set -euo pipefail
+          if [ "${CHECK_RESULT}" != "success" ]; then
+            echo "::error::security-check result was ${CHECK_RESULT}; expected success"
+            exit 1
+          fi
+          echo "Security gate passed."
 
   mutation:
     uses: osloer-industries/.github/.github/workflows/mutation-changed.yml@348b254ef112f4f8e239a41e7adb3f3e2dac3944 # v0.1.6
