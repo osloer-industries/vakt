@@ -1,6 +1,7 @@
 import { existsSync, readFileSync, writeFileSync, mkdirSync, unlinkSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { expandHome } from "./config";
+import { expandHome, loadProviders } from "./config";
+import { resolveProviderInstructionsPath } from "./instructions";
 import type { Policy, ToolPermission } from "./schemas";
 import { serializeToolPermission } from "./permissions";
 
@@ -95,14 +96,28 @@ function updateAgentsMd(agentsMdPath: string, policyContext: string, dryRun: boo
   return { written: true, path: agentsMdPath, action: existed ? "updated" : "created" };
 }
 
+function isEnoent(err: unknown): boolean {
+  return (
+    typeof err === "object" &&
+    err !== null &&
+    "code" in err &&
+    (err as { code: string }).code === "ENOENT"
+  );
+}
+
 function removeVaktBlockFromAgentsMd(agentsMdPath: string, dryRun: boolean): HookResult {
-  if (!existsSync(agentsMdPath)) {
-    return { written: false, path: agentsMdPath, action: "skipped" };
+  let content: string;
+  try {
+    content = readFileSync(agentsMdPath, "utf-8");
+  } catch (err: unknown) {
+    if (isEnoent(err)) {
+      return { written: false, path: agentsMdPath, action: "skipped" };
+    }
+    throw err;
   }
-  const content = readFileSync(agentsMdPath, "utf-8");
   const markerRegex = new RegExp(
     `${VAKT_MARKER_START}[\\s\\S]*?${VAKT_MARKER_END}\\n?`,
-    "g"
+    "g",
   );
   if (!markerRegex.test(content)) {
     return { written: false, path: agentsMdPath, action: "skipped" };
@@ -112,9 +127,19 @@ function removeVaktBlockFromAgentsMd(agentsMdPath: string, dryRun: boolean): Hoo
   if (newContent) {
     writeFileSync(agentsMdPath, newContent + "\n", "utf-8");
   } else {
-    unlinkSync(agentsMdPath);
+    try {
+      unlinkSync(agentsMdPath);
+    } catch (err: unknown) {
+      if (!isEnoent(err)) throw err;
+    }
   }
   return { written: true, path: agentsMdPath, action: "removed" };
+}
+
+function hookAgentsMdPath(providerId: "opencode" | "vibe", fallback: string): string {
+  const provider = loadProviders()[providerId];
+  if (!provider) return expandHome(fallback);
+  return resolveProviderInstructionsPath(provider) ?? expandHome(fallback);
 }
 
 function syncAgentsMdAtPath(
@@ -133,11 +158,19 @@ function syncAgentsMdAtPath(
 }
 
 export function syncOpenCodeAgentsMd(policy: Policy | null, dryRun: boolean): HookResult {
-  return syncAgentsMdAtPath(expandHome("~/.config/opencode/AGENTS.md"), policy, dryRun);
+  return syncAgentsMdAtPath(
+    hookAgentsMdPath("opencode", "~/.config/opencode/AGENTS.md"),
+    policy,
+    dryRun,
+  );
 }
 
 export function syncMistralAgentsMd(policy: Policy | null, dryRun: boolean): HookResult {
-  return syncAgentsMdAtPath(expandHome("~/.vibe/AGENTS.md"), policy, dryRun);
+  return syncAgentsMdAtPath(
+    hookAgentsMdPath("vibe", "~/.vibe/AGENTS.md"),
+    policy,
+    dryRun,
+  );
 }
 
 // ── Hook-capable providers: Hook scripts ─────────────────────────────────────

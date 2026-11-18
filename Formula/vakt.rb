@@ -1,19 +1,19 @@
 class Vakt < Formula
   desc "Secure MCP runtime — policy, audit, registry, multi-provider sync"
   homepage "https://github.com/tn819/vakt"
-  version "0.10.1"
+  version "0.11.0"
 
   on_macos do
     on_arm do
-      url "https://github.com/tn819/vakt/releases/download/v0.10.1/vakt-0.10.1-darwin-arm64.tar.gz"
-      sha256 "8dda151c864cffd3889bf3d1c7620c16d41f99418dc4ebdef3e811923c1abbe1"
+      url "https://github.com/tn819/vakt/releases/download/v0.11.0/vakt-0.11.0-darwin-arm64.tar.gz"
+      sha256 "1c9e2c38c468a9cfe66fe85ce8e7fe03afff1ebe3a9d32ebf6bce6b3665fcf17"
     end
   end
 
   on_linux do
     on_intel do
-      url "https://github.com/tn819/vakt/releases/download/v0.10.1/vakt-0.10.1-linux-x86_64.tar.gz"
-      sha256 "d60cd681daea30e9b353952da99d78570764d635ae70502262109f651cdb5518"
+      url "https://github.com/tn819/vakt/releases/download/v0.11.0/vakt-0.11.0-linux-x86_64.tar.gz"
+      sha256 "e6cecf9a895258a294ed488c3c053e4aa60c0e3c1719a00c80c9710acdbf65cb"
     end
   end
 

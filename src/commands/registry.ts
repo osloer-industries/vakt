@@ -5,6 +5,7 @@ import { spawnSync } from "node:child_process";
 import { loadAgentConfig } from "../lib/config";
 import { SkillsIndexSchema, type SkillsIndexEntry } from "../lib/schemas";
 import { verifyPackage } from "../lib/verify";
+import { requireExecutable, safeSpawnEnv } from "../lib/safe-exec";
 
 const bold   = (s: string) => `\x1b[1m${s}\x1b[0m`;
 const green  = (s: string) => `\x1b[32m${s}\x1b[0m`;
@@ -63,10 +64,11 @@ function installSkill(entry: SkillsIndexEntry, targetDir: string): boolean {
       return false;
     }
     info(`Cloning ${entry.name} from ${entry.url}...`);
-    const r = spawnSync("git", ["clone", "--depth", "1", entry.url, dest], {
+    const git = requireExecutable("git");
+    const r = spawnSync(git, ["clone", "--depth", "1", entry.url, dest], {
       encoding: "utf-8",
       stdio: "inherit",
-      env: { ...(process.env as Record<string, string>), PATH: "/usr/local/bin:/usr/bin:/bin:/opt/homebrew/bin" },
+      env: safeSpawnEnv(),
     });
     if (r.status !== 0) {
       console.error(`Failed to clone ${entry.name}`);

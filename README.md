@@ -641,6 +641,8 @@ bats --recursive tests/     # full e2e suite (~2min)
 
 Tests run in a fully sandboxed `HOME` — nothing touches your real config files or keychain.
 
+Contributors and agents: see [AGENTS.md](AGENTS.md) for org-wide workflow rules (local lint and pre-commit before push, PR readiness, CI expectations).
+
 ---
 
 ## License
