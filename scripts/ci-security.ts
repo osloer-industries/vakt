@@ -48,8 +48,21 @@ while (stack.length > 0) {
     if (entry === ".git" || entry === "node_modules") {
       continue;
     }
+    if (
+      entry === "node_modules" ||
+      entry === "dist" ||
+      entry === ".git" ||
+      entry === "coverage"
+    ) {
+      continue;
+    }
     const full = join(dir, entry);
-    const stat = statSync(full);
+    let stat;
+    try {
+      stat = statSync(full);
+    } catch {
+      continue;
+    }
     if (stat.isDirectory()) {
       stack.push(full);
     } else if ((stat.mode & 0o002) !== 0) {

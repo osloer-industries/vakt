@@ -1,5 +1,5 @@
 export default {
-  packageManager: "bun",
+  packageManager: "npm",
   testRunner: "command",
   commandRunner: {
     command: "bun test",
