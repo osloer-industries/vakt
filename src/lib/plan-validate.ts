@@ -17,9 +17,9 @@ export interface PlanViolation {
   severity: "error" | "warning";
 }
 
-const TOOL_PATTERNS = KNOWN_TOOLS.map(t => ({
+const TOOL_PATTERNS = KNOWN_TOOLS.map((t) => ({
   name: t,
-  regex: new RegExp(`\\b${t}\\s*\\(`, "i"),
+  regex: new RegExp(String.raw`\b${t}\s*\(`, "i"),
 }));
 
 const OUTBOUND_NETWORK_PATTERNS = [
@@ -43,6 +43,26 @@ export function readPlanFile(file: string, cwd = process.cwd()): string {
   return readFileSync(absPath, "utf-8");
 }
 
+function parenthesizedArgsFromLine(line: string): string | undefined {
+  const openParen = line.indexOf("(");
+  if (openParen < 0) return undefined;
+  const closeParen = line.indexOf(")", openParen + 1);
+  if (closeParen <= openParen) return undefined;
+  return line.slice(openParen + 1, closeParen);
+}
+
+function toolMentionsInLine(line: string, stepNum: number, lineIndex: number): ToolMention[] {
+  const args = parenthesizedArgsFromLine(line);
+  const step = stepNum || lineIndex + 1;
+  const mentions: ToolMention[] = [];
+  for (const { name, regex } of TOOL_PATTERNS) {
+    if (regex.test(line)) {
+      mentions.push({ step, tool: name, args });
+    }
+  }
+  return mentions;
+}
+
 export function extractToolMentions(planText: string): ToolMention[] {
   const mentions: ToolMention[] = [];
   const lines = planText.split("\n");
@@ -57,16 +77,7 @@ export function extractToolMentions(planText: string): ToolMention[] {
       stepNum = Number.parseInt(stepMatch[1] ?? "0", 10);
     }
 
-    for (const { name, regex } of TOOL_PATTERNS) {
-      if (regex.test(line)) {
-        const argsMatch = /\(([^)]*)\)/.exec(line);
-        mentions.push({
-          step: stepNum || i + 1,
-          tool: name,
-          args: argsMatch?.[1],
-        });
-      }
-    }
+    mentions.push(...toolMentionsInLine(line, stepNum, i));
   }
 
   return mentions;
