@@ -125,7 +125,14 @@ function removeVaktBlockFromAgentsMd(agentsMdPath: string, dryRun: boolean): Hoo
   if (dryRun) return { written: false, path: agentsMdPath, action: "dry-run" };
   const newContent = content.replace(markerRegex, "").trim();
   if (newContent) {
-    writeFileSync(agentsMdPath, newContent + "\n", "utf-8");
+    try {
+      writeFileSync(agentsMdPath, newContent + "\n", "utf-8");
+    } catch (err: unknown) {
+      if (isEnoent(err)) {
+        return { written: false, path: agentsMdPath, action: "skipped" };
+      }
+      throw err;
+    }
   } else {
     try {
       unlinkSync(agentsMdPath);
@@ -215,11 +222,11 @@ function getHookPaths(provider: "claude" | "gemini" | "codex" | "windsurf"): Hoo
 /** Escape policy text for embedding as a JSON string literal (no shell interpolation). */
 function escapeJsonString(value: string): string {
   return value
-    .replace(/\\/g, "\\\\")
-    .replace(/"/g, '\\"')
-    .replace(/\n/g, "\\n")
-    .replace(/\r/g, "\\r")
-    .replace(/\t/g, "\\t");
+    .replaceAll("\\", String.raw`\\`)
+    .replaceAll('"', String.raw`\"`)
+    .replaceAll("\n", String.raw`\n`)
+    .replaceAll("\r", String.raw`\r`)
+    .replaceAll("\t", String.raw`\t`);
 }
 
 function generateHookScript(policyContext: string): string {
