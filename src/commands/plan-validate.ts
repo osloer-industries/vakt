@@ -1,11 +1,11 @@
 import type { Command } from "commander";
 import { existsSync } from "node:fs";
+import { readBoundedUtf8File, userPathRoots } from "../lib/safe-input";
 import { AGENTS_DIR } from "../lib/config";
 import { loadMergedPolicy, PolicyEngine } from "../lib/policy";
 import {
   extractToolMentions,
   formatPlanViolations,
-  readPlanFile,
   validatePlanMentions,
 } from "../lib/plan-validate";
 
@@ -17,7 +17,7 @@ const dim = (s: string) => `\x1b[2m${s}\x1b[0m`;
 async function loadPlanText(file: string | undefined): Promise<string> {
   if (file) {
     try {
-      return readPlanFile(file);
+      return readBoundedUtf8File(file, userPathRoots(AGENTS_DIR));
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       console.error(message);
