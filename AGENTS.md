@@ -2,9 +2,9 @@
 
 ## Project Overview
 
-`vakt` is an enterprise MCP server and skills manager that syncs approved servers and policies across AI coding tools
-(Claude Code, Cursor, Windsurf, Gemini CLI, Codex, OpenCode). It provides central policy, secrets management, audit
-logging, a skills registry, and supply chain verification — with zero infrastructure overhead.
+`vakt` is an enterprise MCP server and skills manager that syncs approved servers and policies across AI coding
+tools (Claude Code, Cursor, Windsurf, Gemini CLI, Codex, OpenCode). Central policy, secrets, audit logging, skills,
+and supply-chain verification — zero extra infrastructure.
 
 <!-- org-agent-workflow:start v0.1.4 -->
 
@@ -70,7 +70,7 @@ bun run ci:build && bun run ci:lint && bun run ci:test && bun run ci:security
 
 | Topic | Document |
 | --- | --- |
-| Schemas, code style, testing | [docs/agent/guidelines-reference.md](docs/agent/guidelines-reference.md) |
+| Schemas, code style, testing | [guidelines-reference](docs/agent/guidelines-reference.md) |
 | Feature catalog & new commands | [feature-catalog](docs/agent/guidelines-reference.md#feature-catalog) |
 | Secrets, sync, providers | [guidelines-reference](docs/agent/guidelines-reference.md) |
 | CI, SonarCloud, release, debug | [ci-repo-specific](docs/agent/guidelines-reference.md#ci-repo-specific) |
