@@ -30,7 +30,6 @@
   "devDependencies": {
     "@commitlint/cli": "^19.0.0",
     "@commitlint/config-conventional": "^19.0.0",
-    "@stryker-mutator/command-runner": "10.1.1",
     "@stryker-mutator/core": "10.1.1",
     "@semantic-release/changelog": "^6.0.3",
     "@semantic-release/exec": "^6.0.3",

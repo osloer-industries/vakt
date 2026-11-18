@@ -2,7 +2,9 @@
 
 ## Project Overview
 
-`vakt` is an enterprise MCP server and skills manager that syncs approved servers and policies across AI coding tools (Claude Code, Cursor, Windsurf, Gemini CLI, Codex, OpenCode). It provides central policy, secrets management, audit logging, a skills registry, and supply chain verification — with zero infrastructure overhead.
+`vakt` is an enterprise MCP server and skills manager that syncs approved servers and policies across AI coding
+tools (Claude Code, Cursor, Windsurf, Gemini CLI, Codex, OpenCode). Central policy, secrets, audit logging, skills,
+and supply-chain verification — zero extra infrastructure.
 
 <!-- org-agent-workflow:start v0.1.4 -->
 
@@ -48,7 +50,8 @@ These rules apply to every agent (Cursor, Grok Bot, any other) working in this r
 
 ## Language: TypeScript + Bun
 
-Bun is the runtime, test runner, and bundler. **Zod** validates all external JSON/TOML. See [agent reference](docs/agent/guidelines-reference.md) for toolchain, layout, and conventions.
+Bun is the runtime, test runner, and bundler. **Zod** validates all external JSON/TOML. See
+[agent reference](docs/agent/guidelines-reference.md) for toolchain, layout, and conventions.
 
 ```bash
 bun run dev
@@ -65,21 +68,23 @@ bun run ci:build && bun run ci:lint && bun run ci:test && bun run ci:security
 
 ## Agent reference (detailed)
 
-| Topic | Document |
-|-------|----------|
-| Schemas, code style, testing | [docs/agent/guidelines-reference.md](docs/agent/guidelines-reference.md) |
-| Feature catalog & new commands | [docs/agent/guidelines-reference.md#feature-catalog](docs/agent/guidelines-reference.md#feature-catalog) |
-| Secrets, sync, providers | [docs/agent/guidelines-reference.md](docs/agent/guidelines-reference.md) |
-| CI, SonarCloud, release, debug | [docs/agent/guidelines-reference.md#ci-repo-specific](docs/agent/guidelines-reference.md#ci-repo-specific) |
+| Topic                          | Document                                                                                    |
+| ------------------------------ | ------------------------------------------------------------------------------------------- |
+| Schemas, code style, testing   | [docs/agent/guidelines-reference.md](docs/agent/guidelines-reference.md)                    |
+| Feature catalog & new commands | [feature catalog](docs/agent/guidelines-reference.md#feature-catalog)                 |
+| Secrets, sync, providers       | [docs/agent/guidelines-reference.md](docs/agent/guidelines-reference.md)                    |
+| CI, SonarCloud, release, debug | [CI & release](docs/agent/guidelines-reference.md#ci-repo-specific)                     |
 
 ## Non-negotiables
 
 - Import every type from `src/lib/schemas.ts` — no inline schema types in commands or libs.
-- Every command ships with unit tests (`bun test`) and e2e tests (`bats`); e2e setup uses `setup_test_env` and `mock_secrets_backend`.
+- Every command ships with unit tests (`bun test`) and e2e tests (`bats`); e2e setup uses `setup_test_env` and
+  `mock_secrets_backend`.
 - Enforce policy only via `PolicyEngine` in `src/lib/policy.ts` — never inline checks in commands.
 - Never print or log secrets; mask as `***` in user-visible output.
 - When you add or change a command, update the feature catalog in `docs/agent/guidelines-reference.md` and `src/vakt.sh`.
 
 ## SonarCloud
 
-Project key `tn819_agentctl` (legacy name). Do not rename — see [guidelines-reference](docs/agent/guidelines-reference.md#sonarcloud).
+Project key `tn819_agentctl` (legacy name). Do not rename — see
+[guidelines-reference](docs/agent/guidelines-reference.md#sonarcloud).

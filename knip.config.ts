@@ -16,6 +16,7 @@ const config: KnipConfig = {
 
   // Exports used only within the same file (internal helpers that happen to be exported)
   ignoreExportsUsedInFile: true,
+  ignore: ["stryker.config.mjs"],
   ignoreDependencies: [
     // referenced in .releaserc / release config, not imported
     "@semantic-release/exec",
