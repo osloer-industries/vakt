@@ -45,7 +45,7 @@ while (stack.length > 0) {
     continue;
   }
   for (const entry of readdirSync(dir)) {
-    if (entry === ".git") {
+    if (entry === ".git" || entry === "node_modules") {
       continue;
     }
     const full = join(dir, entry);
