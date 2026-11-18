@@ -1,9 +1,14 @@
 #!/usr/bin/env node
-import { execFileSync } from "node:child_process";
 import { lstatSync, readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
+import { ciExecFile, resolveCiBinary } from "./ci-env.ts";
 
-const TscBin = join(process.cwd(), "node_modules", ".bin", "tsc");
+const TscJs = join(process.cwd(), "node_modules", "typescript", "lib", "tsc.js");
+const NodeBin = process.execPath;
+const BashBin = resolveCiBinary("bash");
+const Python3Bin = resolveCiBinary("python3");
+const BunBin = resolveCiBinary("bun");
+const ChmodBin = resolveCiBinary("chmod");
 
 function walkFiles(
   root: string,
@@ -44,7 +49,7 @@ function walkFiles(
   return results;
 }
 
-execFileSync(TscBin, ["--noEmit"], { stdio: "inherit" });
+ciExecFile(NodeBin, [TscJs, "--noEmit"]);
 
 for (const file of walkFiles(".", ".json", true)) {
   try {
@@ -58,15 +63,15 @@ for (const file of walkFiles(".", ".json", true)) {
 const workflowDir = join(".github", "workflows");
 for (const file of readdirSync(workflowDir).filter((f) => f.endsWith(".yml"))) {
   const workflowPath = join(workflowDir, file);
-  execFileSync(
-    "python3",
-    ["-c", "import yaml, sys; yaml.safe_load(open(sys.argv[1]))", workflowPath],
-    { stdio: "inherit" },
-  );
+  ciExecFile(Python3Bin, [
+    "-c",
+    "import yaml, sys; yaml.safe_load(open(sys.argv[1]))",
+    workflowPath,
+  ]);
 }
 
 for (const file of walkFiles(".", ".sh", true)) {
-  execFileSync("bash", ["-n", file], { stdio: "inherit" });
+  ciExecFile(BashBin, ["-n", file]);
 }
 
 for (const skillDir of readdirSync("skills", { withFileTypes: true }).filter((d) =>
@@ -85,10 +90,10 @@ for (const skillDir of readdirSync("skills", { withFileTypes: true }).filter((d)
   }
 }
 
-execFileSync("bun", ["src/index.ts", "--version"], { stdio: "inherit" });
-execFileSync("bun", ["src/index.ts", "--help"], { stdio: "inherit" });
+ciExecFile(BunBin, ["src/index.ts", "--version"]);
+ciExecFile(BunBin, ["src/index.ts", "--help"]);
 
-execFileSync("chmod", ["+x", "install.sh"], { stdio: "inherit" });
+ciExecFile(ChmodBin, ["+x", "install.sh"]);
 const installSh = readFileSync("install.sh", "utf8");
 if (!installSh.includes("#!/usr/bin/env bash")) {
   throw new Error("install.sh missing bash shebang");

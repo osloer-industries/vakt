@@ -1,7 +1,8 @@
 #!/usr/bin/env node
-import { execSync } from "node:child_process";
+import { ciExecFile, resolveCiBinary } from "./ci-env.ts";
 
-execSync("bun test src/", {
-  stdio: "inherit",
-  env: { ...process.env, AGENTS_SECRETS_BACKEND: "env" },
+const BunBin = resolveCiBinary("bun");
+
+ciExecFile(BunBin, ["test", "src/"], {
+  env: { AGENTS_SECRETS_BACKEND: "env" },
 });
