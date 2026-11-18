@@ -23,46 +23,63 @@ function safeStat(path: string, useLstat: boolean): Stats | null {
   }
 }
 
-/** Depth-first walk returning repo-owned files (optional extension filter). */
-export function walkRepoFiles(
-  root: string,
-  options: WalkRepoFilesOptions = {},
-): string[] {
-  const skipDirNames = options.skipDirNames ?? CI_SKIP_DIR_NAMES;
-  const useLstat = options.useLstat ?? true;
-  const { extensions } = options;
-  const results: string[] = [];
-  const stack = [root];
+function fileMatchesExtensions(
+  entryName: string,
+  extensions: readonly string[] | undefined,
+): boolean {
+  if (extensions === undefined) {
+    return true;
+  }
+  return extensions.some((ext) => entryName.endsWith(ext));
+}
 
-  while (stack.length > 0) {
-    const dir = stack.pop();
-    if (dir === undefined) {
+type WalkContext = {
+  skipDirNames: ReadonlySet<string>;
+  useLstat: boolean;
+  extensions: readonly string[] | undefined;
+  results: string[];
+  stack: string[];
+};
+
+function walkOneDirectory(ctx: WalkContext, dir: string): void {
+  let entries: string[];
+  try {
+    entries = readdirSync(dir);
+  } catch {
+    return;
+  }
+  for (const entry of entries) {
+    const full = join(dir, entry);
+    const stat = safeStat(full, ctx.useLstat);
+    if (stat === null) {
       continue;
     }
-    let entries: string[];
-    try {
-      entries = readdirSync(dir);
-    } catch {
+    if (stat.isDirectory()) {
+      if (!ctx.skipDirNames.has(entry)) {
+        ctx.stack.push(full);
+      }
       continue;
     }
-    for (const entry of entries) {
-      const full = join(dir, entry);
-      const stat = safeStat(full, useLstat);
-      if (stat === null) {
-        continue;
-      }
-      if (stat.isDirectory()) {
-        if (skipDirNames.has(entry)) {
-          continue;
-        }
-        stack.push(full);
-      } else if (
-        extensions === undefined ||
-        extensions.some((ext) => entry.endsWith(ext))
-      ) {
-        results.push(full);
-      }
+    if (fileMatchesExtensions(entry, ctx.extensions)) {
+      ctx.results.push(full);
     }
   }
-  return results;
+}
+
+/** Depth-first walk returning repo-owned files (optional extension filter). */
+export function walkRepoFiles(root: string, options?: WalkRepoFilesOptions): string[] {
+  const ctx: WalkContext = {
+    skipDirNames: options?.skipDirNames ?? CI_SKIP_DIR_NAMES,
+    useLstat: options?.useLstat ?? true,
+    extensions: options?.extensions,
+    results: [],
+    stack: [root],
+  };
+  while (ctx.stack.length > 0) {
+    const dir = ctx.stack.pop();
+    if (dir !== undefined) {
+      walkOneDirectory(ctx, dir);
+    }
+  }
+  return ctx.results;
 }

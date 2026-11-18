@@ -14,14 +14,17 @@ export type CiExecFileOptions = Pick<
   pathPrefix?: string;
 };
 
+const DEFAULT_CI_EXEC_OPTIONS: CiExecFileOptions = { stdio: "inherit" };
+
 export function ciExecFile(
   file: string,
   args: string[],
-  options: CiExecFileOptions = {
-    stdio: "inherit",
-  },
+  options?: CiExecFileOptions,
 ): string | undefined {
-  const { pathPrefix, env: extraEnv = {}, ...execOptions } = options;
+  const { pathPrefix, env: extraEnv = {}, ...execOptions } = {
+    ...DEFAULT_CI_EXEC_OPTIONS,
+    ...options,
+  };
   const pathParts = [pathPrefix, CI_SAFE_PATH].filter(
     (part): part is string => part !== undefined && part.length > 0,
   );
