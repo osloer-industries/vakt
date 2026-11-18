@@ -4,7 +4,7 @@ This directory contains GitHub Actions workflows for vakt.
 
 Org-wide gates (actionlint, zizmor, CodeQL init/analyze, dependency review) call reusable workflows from [`osloer-industries/.github`](https://github.com/osloer-industries/.github) at an immutable commit SHA with a `# v0.x.y` version comment. Bump those refs via Dependabot `ci(deps)` pull requests (group `osloer-reusables`). See `docs/consuming-workflows.md` in that repository.
 
-**Pinned org reusables:** `d1fd7700ad30c0bafbe1d0e4b1eac1fbbb4137b3` (`# v0.1.2`).
+**Pinned org reusables:** `348b254ef112f4f8e239a41e7adb3f3e2dac3944` (`# v0.1.6`).
 
 ## Workflows
 

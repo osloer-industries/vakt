@@ -17,4 +17,4 @@ concurrency:
 
 jobs:
   analyze:
-    uses: osloer-industries/.github/.github/workflows/codeql-javascript-typescript.yml@d1fd7700ad30c0bafbe1d0e4b1eac1fbbb4137b3 # v0.1.2
+    uses: osloer-industries/.github/.github/workflows/codeql-javascript-typescript.yml@348b254ef112f4f8e239a41e7adb3f3e2dac3944 # v0.1.6
