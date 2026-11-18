@@ -105,6 +105,15 @@ function isEnoent(err: unknown): boolean {
   );
 }
 
+function readUtf8IgnoringEnoent(path: string): string | null {
+  try {
+    return readFileSync(path, "utf-8");
+  } catch (err: unknown) {
+    if (isEnoent(err)) return null;
+    throw err;
+  }
+}
+
 function writeUtf8IgnoringEnoent(path: string, data: string): boolean {
   try {
     writeFileSync(path, data, "utf-8");
@@ -115,20 +124,27 @@ function writeUtf8IgnoringEnoent(path: string, data: string): boolean {
   }
 }
 
-function removeVaktBlockFromAgentsMd(agentsMdPath: string, dryRun: boolean): HookResult {
-  let content: string;
+function unlinkIgnoringEnoent(path: string): void {
   try {
-    content = readFileSync(agentsMdPath, "utf-8");
+    unlinkSync(path);
   } catch (err: unknown) {
-    if (isEnoent(err)) {
-      return { written: false, path: agentsMdPath, action: "skipped" };
-    }
-    throw err;
+    if (!isEnoent(err)) throw err;
   }
-  const markerRegex = new RegExp(
+}
+
+function agentsMdMarkerRegex(): RegExp {
+  return new RegExp(
     `${VAKT_MARKER_START}[\\s\\S]*?${VAKT_MARKER_END}\\n?`,
     "g",
   );
+}
+
+function removeVaktBlockFromAgentsMd(agentsMdPath: string, dryRun: boolean): HookResult {
+  const content = readUtf8IgnoringEnoent(agentsMdPath);
+  if (content === null) {
+    return { written: false, path: agentsMdPath, action: "skipped" };
+  }
+  const markerRegex = agentsMdMarkerRegex();
   if (!markerRegex.test(content)) {
     return { written: false, path: agentsMdPath, action: "skipped" };
   }
@@ -139,11 +155,7 @@ function removeVaktBlockFromAgentsMd(agentsMdPath: string, dryRun: boolean): Hoo
       return { written: false, path: agentsMdPath, action: "skipped" };
     }
   } else {
-    try {
-      unlinkSync(agentsMdPath);
-    } catch (err: unknown) {
-      if (!isEnoent(err)) throw err;
-    }
+    unlinkIgnoringEnoent(agentsMdPath);
   }
   return { written: true, path: agentsMdPath, action: "removed" };
 }
