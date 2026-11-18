@@ -60,8 +60,6 @@ jobs:
 
   agents-md-lint:
     uses: osloer-industries/.github/.github/workflows/agents-md-lint.yml@348b254ef112f4f8e239a41e7adb3f3e2dac3944 # v0.1.6
-    with:
-      max-lines: 360
 
   codeql:
     uses: osloer-industries/.github/.github/workflows/codeql-javascript-typescript.yml@348b254ef112f4f8e239a41e7adb3f3e2dac3944 # v0.1.6
