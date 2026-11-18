@@ -86,7 +86,8 @@ jobs:
           grep -q "#!/usr/bin/env bash" install.sh
           grep -q "curl" install.sh || grep -q "git clone" install.sh
 
-  sonar-analyze:
+  sonarcloud:
+    name: sonarcloud
     uses: osloer-industries/.github/.github/workflows/sonarqube-cloud-node.yml@348b254ef112f4f8e239a41e7adb3f3e2dac3944 # v0.1.6
     permissions:
       contents: read
@@ -100,11 +101,11 @@ jobs:
 
   sonar-zero-open-issues:
     if: github.event_name == 'pull_request'
-    needs: sonar-analyze
+    needs: sonarcloud
     uses: osloer-industries/.github/.github/workflows/sonarcloud-zero-issues.yml@348b254ef112f4f8e239a41e7adb3f3e2dac3944 # v0.1.6
     with:
       project-key: tn819_agentctl
-      ce-task-id: ${{ needs.sonar-analyze.outputs.ce-task-id }}
+      ce-task-id: ${{ needs.sonarcloud.outputs.ce-task-id }}
     secrets:
       SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
 
@@ -319,7 +320,7 @@ jobs:
       - test
       - security
       - codeql
-      - sonar-analyze
+      - sonarcloud
       - sonar-zero-open-issues
     if: always()
     uses: osloer-industries/.github/.github/workflows/ci-passed.yml@348b254ef112f4f8e239a41e7adb3f3e2dac3944 # v0.1.6

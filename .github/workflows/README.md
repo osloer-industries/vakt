@@ -16,7 +16,7 @@ Org-wide gates (actionlint, zizmor, CodeQL init/analyze, dependency review) call
 
 - `workflow-security` — actionlint + zizmor
 - `codeql-javascript-typescript` — CodeQL for TypeScript (local config: `.github/codeql/codeql-config.yml`)
-- `sonarqube-cloud-node` — Bun coverage + SonarCloud upload (`test:coverage`)
+- `sonarqube-cloud-node` — job **`sonarcloud`** (branch-protection context): Bun coverage + SonarCloud upload (`test:coverage`)
 - `sonarcloud-zero-issues` — zero open issues gate (pull requests only; skipped on push via `ci-passed`)
 - `ci-passed` — aggregate required check
 
