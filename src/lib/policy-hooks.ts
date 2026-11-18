@@ -105,6 +105,16 @@ function isEnoent(err: unknown): boolean {
   );
 }
 
+function writeUtf8IgnoringEnoent(path: string, data: string): boolean {
+  try {
+    writeFileSync(path, data, "utf-8");
+    return true;
+  } catch (err: unknown) {
+    if (isEnoent(err)) return false;
+    throw err;
+  }
+}
+
 function removeVaktBlockFromAgentsMd(agentsMdPath: string, dryRun: boolean): HookResult {
   let content: string;
   try {
@@ -125,13 +135,8 @@ function removeVaktBlockFromAgentsMd(agentsMdPath: string, dryRun: boolean): Hoo
   if (dryRun) return { written: false, path: agentsMdPath, action: "dry-run" };
   const newContent = content.replace(markerRegex, "").trim();
   if (newContent) {
-    try {
-      writeFileSync(agentsMdPath, newContent + "\n", "utf-8");
-    } catch (err: unknown) {
-      if (isEnoent(err)) {
-        return { written: false, path: agentsMdPath, action: "skipped" };
-      }
-      throw err;
+    if (!writeUtf8IgnoringEnoent(agentsMdPath, newContent + "\n")) {
+      return { written: false, path: agentsMdPath, action: "skipped" };
     }
   } else {
     try {
