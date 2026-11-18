@@ -2,6 +2,7 @@ name: CI
 
 permissions:
   contents: read
+  actions: read
 
 on:
   push:
@@ -21,70 +22,53 @@ jobs:
       contents: read
       actions: read
 
+  build:
+    uses: osloer-industries/.github/.github/workflows/node-npm-quality.yml@348b254ef112f4f8e239a41e7adb3f3e2dac3944 # v0.1.6
+    with:
+      package-manager: bun
+      job-name: build
+      check-npm-script: ci:build
+      timeout-minutes: 15
+
+  lint:
+    uses: osloer-industries/.github/.github/workflows/node-npm-quality.yml@348b254ef112f4f8e239a41e7adb3f3e2dac3944 # v0.1.6
+    with:
+      package-manager: bun
+      job-name: lint
+      check-npm-script: ci:lint
+
+  test:
+    uses: osloer-industries/.github/.github/workflows/node-npm-quality.yml@348b254ef112f4f8e239a41e7adb3f3e2dac3944 # v0.1.6
+    with:
+      package-manager: bun
+      job-name: test
+      check-npm-script: ci:test
+
+  security:
+    uses: osloer-industries/.github/.github/workflows/node-npm-quality.yml@348b254ef112f4f8e239a41e7adb3f3e2dac3944 # v0.1.6
+    with:
+      package-manager: bun
+      job-name: security
+      check-npm-script: ci:security
+
+  mutation:
+    uses: osloer-industries/.github/.github/workflows/mutation-changed.yml@348b254ef112f4f8e239a41e7adb3f3e2dac3944 # v0.1.6
+    with:
+      package-manager: bun
+      full-npm-script: test:mutation
+      timeout-minutes: 20
+
+  agents-md-lint:
+    uses: osloer-industries/.github/.github/workflows/agents-md-lint.yml@348b254ef112f4f8e239a41e7adb3f3e2dac3944 # v0.1.6
+    with:
+      max-lines: 360
+
   codeql:
     uses: osloer-industries/.github/.github/workflows/codeql-javascript-typescript.yml@348b254ef112f4f8e239a41e7adb3f3e2dac3944 # v0.1.6
     permissions:
       contents: read
       actions: read
       security-events: write
-
-  build:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-        with:
-          persist-credentials: false
-
-      - name: Setup Bun
-        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
-
-      - name: Install dependencies
-        run: bun install --frozen-lockfile --ignore-scripts
-
-      - name: Type check
-        run: ./node_modules/.bin/tsc --noEmit
-
-      - name: Validate JSON files
-        run: |
-          set -euo pipefail
-          find . -name "*.json" -not -path "*/node_modules/*" -type f -print0 |
-            while IFS= read -r -d '' file; do
-              python3 -m json.tool "$file" > /dev/null
-            done
-
-      - name: Validate workflow YAML
-        run: |
-          set -euo pipefail
-          find .github/workflows -name "*.yml" -type f -print0 |
-            while IFS= read -r -d '' file; do
-              python3 -c 'import yaml, sys; yaml.safe_load(open(sys.argv[1]))' "$file"
-            done
-
-      - name: Validate shell scripts syntax
-        run: |
-          set -euo pipefail
-          find . -name "*.sh" -not -path "*/node_modules/*" -type f -print0 |
-            while IFS= read -r -d '' file; do
-              bash -n "$file"
-            done
-
-      - name: Check skill files
-        run: |
-          for skill_dir in skills/*/; do
-            [ -f "$skill_dir/SKILL.md" ] || (echo "Missing SKILL.md in $skill_dir" && exit 1)
-            grep -q "^---" "$skill_dir/SKILL.md" || (echo "Missing YAML frontmatter in $skill_dir/SKILL.md" && exit 1)
-          done
-
-      - name: Check CLI entry point responds
-        run: |
-          bun run src/index.ts --version
-          bun run src/index.ts --help
-
-      - name: Check installer script
-        run: |
-          chmod +x install.sh
-          grep -q "#!/usr/bin/env bash" install.sh
-          grep -q "curl" install.sh || grep -q "git clone" install.sh
 
   sonar-scan:
     uses: osloer-industries/.github/.github/workflows/sonarqube-cloud-node.yml@348b254ef112f4f8e239a41e7adb3f3e2dac3944 # v0.1.6
@@ -290,72 +274,19 @@ jobs:
 
           bun run src/index.ts list
 
-  lint:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-        with:
-          persist-credentials: false
-
-      - name: Check shell scripts
-        run: |
-          find . -name "*.sh" -type f -exec bash -n {} \;
-
-      - name: Check for TODO/FIXME
-        run: |
-          ! grep -r "TODO\|FIXME" src/ --include="*.ts" || (echo "Found TODO/FIXME comments" && exit 1)
-
-  test:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-        with:
-          persist-credentials: false
-
-      - name: Setup Bun
-        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
-
-      - name: Install dependencies
-        run: bun install --frozen-lockfile --ignore-scripts
-
-      - name: Run unit tests
-        run: |
-          export AGENTS_SECRETS_BACKEND=env
-          bun test src/
-
-  security:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-        with:
-          persist-credentials: false
-
-      - name: Check for hardcoded secrets
-        run: |
-          ! grep -rE "(password|token|api_key|secret)\s*=\s*['\"][^'\"]{10,}['\"]" src/ --include="*.ts" || (echo "Found hardcoded credentials" && exit 1)
-          ! grep -rE "(ghp|gho|github_pat)_[a-zA-Z0-9]{36}" src/ --include="*.ts" || (echo "Found hardcoded GitHub tokens" && exit 1)
-
-      - name: Check file permissions
-        run: |
-          world_writable=$(find . -type f -perm -002 -not -path "./.git/*" 2>/dev/null)
-          if [ -n "$world_writable" ]; then
-            echo "Found world-writable files:"
-            echo "$world_writable"
-            exit 1
-          fi
-          echo "✓ No world-writable files found"
-
   ci-passed:
     name: ci-passed
     needs:
       - workflow-security
       - build
-      - docker-e2e
-      - test-macos
-      - test-linux
       - lint
       - test
       - security
+      - mutation
+      - agents-md-lint
+      - docker-e2e
+      - test-macos
+      - test-linux
       - codeql
       - sonar-scan
       - sonarcloud

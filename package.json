@@ -18,6 +18,11 @@
     "lint:md": "markdownlint-cli2 \"docs/adr/**/*.md\"",
     "lint:adr": "bun run scripts/check-adrs.ts",
     "check:tool-enum": "bun run scripts/check-tool-enum.ts",
+    "ci:build": "node --experimental-strip-types scripts/ci-build.ts",
+    "ci:lint": "node --experimental-strip-types scripts/ci-lint.ts",
+    "ci:test": "node --experimental-strip-types scripts/ci-test.ts",
+    "ci:security": "node --experimental-strip-types scripts/ci-security.ts",
+    "test:mutation": "stryker run",
     "lint:docs": "bun run lint:md && bun run lint:adr",
     "pretest": "chmod +x src/vakt.sh",
     "prepare": "husky"
@@ -25,6 +30,8 @@
   "devDependencies": {
     "@commitlint/cli": "^19.0.0",
     "@commitlint/config-conventional": "^19.0.0",
+    "@stryker-mutator/command-runner": "10.1.1",
+    "@stryker-mutator/core": "10.1.1",
     "@semantic-release/changelog": "^6.0.3",
     "@semantic-release/exec": "^6.0.3",
     "@semantic-release/git": "^10.0.1",
