@@ -7,6 +7,8 @@ on:
   push:
     branches: [main]
   pull_request:
+  schedule:
+    - cron: "17 3 * * 1"
 
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
@@ -14,94 +16,196 @@ concurrency:
 
 jobs:
   workflow-security:
-    uses: osloer-industries/.github/.github/workflows/workflow-security.yml@d1fd7700ad30c0bafbe1d0e4b1eac1fbbb4137b3 # v0.1.2
+    uses: osloer-industries/.github/.github/workflows/workflow-security.yml@348b254ef112f4f8e239a41e7adb3f3e2dac3944 # v0.1.6
     permissions:
       contents: read
       actions: read
 
+  build-check:
+    uses: osloer-industries/.github/.github/workflows/node-npm-quality.yml@348b254ef112f4f8e239a41e7adb3f3e2dac3944 # v0.1.6
+    with:
+      package-manager: bun
+      job-name: build
+      check-npm-script: ci:build
+      timeout-minutes: 15
+
   build:
+    name: build
+    needs: [build-check]
+    if: always()
     runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-        with:
-          persist-credentials: false
-
-      - name: Setup Bun
-        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
-
-      - name: Install dependencies
-        run: bun install --frozen-lockfile --ignore-scripts
-
-      - name: Type check
-        run: ./node_modules/.bin/tsc --noEmit
-
-      - name: Validate JSON files
+      - name: Aggregate build gate
+        env:
+          CHECK_RESULT: ${{ needs.build-check.result }}
         run: |
           set -euo pipefail
-          find . -name "*.json" -not -path "*/node_modules/*" -type f -print0 |
-            while IFS= read -r -d '' file; do
-              python3 -m json.tool "$file" > /dev/null
-            done
+          if [ "${CHECK_RESULT}" != "success" ]; then
+            echo "::error::build-check result was ${CHECK_RESULT}; expected success"
+            exit 1
+          fi
+          echo "Build gate passed."
 
-      - name: Validate workflow YAML
+  lint-check:
+    uses: osloer-industries/.github/.github/workflows/node-npm-quality.yml@348b254ef112f4f8e239a41e7adb3f3e2dac3944 # v0.1.6
+    with:
+      package-manager: bun
+      job-name: lint
+      check-npm-script: ci:lint
+
+  lint:
+    name: lint
+    needs: [lint-check]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - name: Aggregate lint gate
+        env:
+          CHECK_RESULT: ${{ needs.lint-check.result }}
         run: |
           set -euo pipefail
-          find .github/workflows -name "*.yml" -type f -print0 |
-            while IFS= read -r -d '' file; do
-              python3 -c 'import yaml, sys; yaml.safe_load(open(sys.argv[1]))' "$file"
-            done
+          if [ "${CHECK_RESULT}" != "success" ]; then
+            echo "::error::lint-check result was ${CHECK_RESULT}; expected success"
+            exit 1
+          fi
+          echo "Lint gate passed."
 
-      - name: Validate shell scripts syntax
+  test-check:
+    uses: osloer-industries/.github/.github/workflows/node-npm-quality.yml@348b254ef112f4f8e239a41e7adb3f3e2dac3944 # v0.1.6
+    with:
+      package-manager: bun
+      job-name: test
+      check-npm-script: ci:test
+
+  test:
+    name: test
+    needs: [test-check]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - name: Aggregate test gate
+        env:
+          CHECK_RESULT: ${{ needs.test-check.result }}
         run: |
           set -euo pipefail
-          find . -name "*.sh" -not -path "*/node_modules/*" -type f -print0 |
-            while IFS= read -r -d '' file; do
-              bash -n "$file"
-            done
+          if [ "${CHECK_RESULT}" != "success" ]; then
+            echo "::error::test-check result was ${CHECK_RESULT}; expected success"
+            exit 1
+          fi
+          echo "Test gate passed."
 
-      - name: Check skill files
+  security-check:
+    uses: osloer-industries/.github/.github/workflows/node-npm-quality.yml@348b254ef112f4f8e239a41e7adb3f3e2dac3944 # v0.1.6
+    with:
+      package-manager: bun
+      job-name: security
+      check-npm-script: ci:security
+
+  security:
+    name: security
+    needs: [security-check]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - name: Aggregate security gate
+        env:
+          CHECK_RESULT: ${{ needs.security-check.result }}
         run: |
-          for skill_dir in skills/*/; do
-            [ -f "$skill_dir/SKILL.md" ] || (echo "Missing SKILL.md in $skill_dir" && exit 1)
-            grep -q "^---" "$skill_dir/SKILL.md" || (echo "Missing YAML frontmatter in $skill_dir/SKILL.md" && exit 1)
-          done
+          set -euo pipefail
+          if [ "${CHECK_RESULT}" != "success" ]; then
+            echo "::error::security-check result was ${CHECK_RESULT}; expected success"
+            exit 1
+          fi
+          echo "Security gate passed."
 
-      - name: Check CLI entry point responds
-        run: |
-          bun run src/index.ts --version
-          bun run src/index.ts --help
+  mutation:
+    uses: osloer-industries/.github/.github/workflows/mutation-changed.yml@348b254ef112f4f8e239a41e7adb3f3e2dac3944 # v0.1.6
+    with:
+      package-manager: bun
+      full-npm-script: test:mutation
+      timeout-minutes: 20
 
-      - name: Check installer script
-        run: |
-          chmod +x install.sh
-          grep -q "#!/usr/bin/env bash" install.sh
-          grep -q "curl" install.sh || grep -q "git clone" install.sh
+  agents-md-lint:
+    uses: osloer-industries/.github/.github/workflows/agents-md-lint.yml@348b254ef112f4f8e239a41e7adb3f3e2dac3944 # v0.1.6
 
-  sonarcloud:
+  codeql:
+    uses: osloer-industries/.github/.github/workflows/codeql-javascript-typescript.yml@348b254ef112f4f8e239a41e7adb3f3e2dac3944 # v0.1.6
+    permissions:
+      contents: read
+      actions: read
+      security-events: write
+
+  sonar-scan:
+    uses: osloer-industries/.github/.github/workflows/sonarqube-cloud-node.yml@348b254ef112f4f8e239a41e7adb3f3e2dac3944 # v0.1.6
     permissions:
       contents: read
       pull-requests: read
+    with:
+      package-manager: bun
+      coverage-npm-script: test:coverage
+      timeout-minutes: 20
+    secrets:
+      SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+
+  sonar-zero-open-issues:
+    if: github.event_name == 'pull_request'
+    needs: sonar-scan
+    uses: osloer-industries/.github/.github/workflows/sonarcloud-zero-issues.yml@348b254ef112f4f8e239a41e7adb3f3e2dac3944 # v0.1.6
+    with:
+      project-key: tn819_agentctl
+      ce-task-id: ${{ needs.sonar-scan.outputs.ce-task-id }}
+    secrets:
+      SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+
+  sonarcloud:
+    name: sonarcloud
+    needs:
+      - sonar-scan
+      - sonar-zero-open-issues
+    if: always()
     runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-        with:
-          fetch-depth: 0
-          persist-credentials: false
-
-      - name: Setup Bun
-        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
-
-      - name: Install dependencies
-        run: bun install --frozen-lockfile --ignore-scripts
-
-      - name: Generate coverage report
-        run: bun test --coverage --coverage-reporter lcov
-
-      - name: SonarCloud Scan
-        uses: SonarSource/sonarqube-scan-action@e805d875275f728fac1885b413934be6d7c63f65 # v8.4.1
+      - name: Aggregate Sonar scan and zero-issues gates
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          SCAN_RESULT: ${{ needs.sonar-scan.result }}
+          ZERO_RESULT: ${{ needs.sonar-zero-open-issues.result }}
+        run: |
+          set -euo pipefail
+          if [ "${SCAN_RESULT}" != "success" ]; then
+            echo "::error::sonar-scan result was ${SCAN_RESULT}; expected success"
+            exit 1
+          fi
+          case "${ZERO_RESULT}" in
+            success)
+              echo "Sonar scan and zero-issues gates passed."
+              ;;
+            skipped)
+              if [ "${GITHUB_EVENT_NAME}" = "pull_request" ]; then
+                echo "::error::sonar-zero-open-issues was skipped on pull_request"
+                exit 1
+              fi
+              echo "Sonar scan passed; zero-issues skipped on ${GITHUB_EVENT_NAME}."
+              ;;
+            *)
+              echo "::error::sonar-zero-open-issues result was ${ZERO_RESULT}; expected success or skipped"
+              exit 1
+              ;;
+          esac
 
   docker-e2e:
     runs-on: ubuntu-latest
@@ -122,3 +226,149 @@ jobs:
       - name: Dump container logs on failure
         if: failure()
         run: docker compose -f tests/docker/docker-compose.yml logs
+
+  test-macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile --ignore-scripts
+
+      - name: Install bats
+        run: brew install bats-core
+
+      - name: Run e2e tests (excluding Docker sandbox suite)
+        run: |
+          set -euo pipefail
+          export PATH="$PWD/src:$HOME/.bun/bin:$PATH"
+          export AGENTS_SECRETS_BACKEND=env
+          bats_files=()
+          while IFS= read -r file; do
+            bats_files+=("$file")
+          done < <(find tests/e2e -maxdepth 1 -name '*.bats' ! -name 'agent-docker.bats' | sort)
+          bats "${bats_files[@]}"
+
+      - name: Build binary (smoke test prerequisite)
+        run: bun build src/index.ts --compile --outfile dist/vakt
+
+      - name: Run binary smoke tests
+        run: |
+          export AGENTS_SECRETS_BACKEND=env
+          bats tests/e2e/binary.bats
+
+      - name: Test CLI commands
+        run: |
+          export PATH="$HOME/.bun/bin:$PATH"
+          export AGENTS_DIR="$HOME/.agents-test"
+          export AGENTS_SECRETS_BACKEND=env
+
+          bun run src/index.ts init
+          [ -d "$AGENTS_DIR" ]
+          [ -f "$AGENTS_DIR/config.json" ]
+
+          bun run src/index.ts config list
+          bun run src/index.ts config set paths.code ~/Projects
+
+          bun run src/index.ts secrets set TEST_KEY "test_value"
+          [ "$(bun run src/index.ts secrets get TEST_KEY)" = "test_value" ]
+
+          bun run src/index.ts add-server test npx -y test-mcp
+          bun run src/index.ts list servers | grep -q "test"
+
+          bun run src/index.ts list
+
+  test-linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile --ignore-scripts
+
+      - name: Install bats
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y bats
+
+      - name: Create kind cluster for Kata kubectl e2e
+        uses: helm/kind-action@ea822c7bf1874f08e5a491df991c228edffc3376 # v1.15.2
+        with:
+          cluster_name: vakt-ci
+
+      - name: Setup Docker
+        run: |
+          if ! docker info &>/dev/null; then
+            echo "Starting Docker daemon..."
+            sudo systemctl start docker
+            sleep 5
+          fi
+          docker info
+          docker run --rm hello-world
+
+      - name: Run e2e tests
+        run: |
+          export PATH="$PWD/src:$HOME/.bun/bin:$PATH"
+          export AGENTS_SECRETS_BACKEND=env
+          bats tests/e2e/
+
+      - name: Build binary (smoke test prerequisite)
+        run: bun build src/index.ts --compile --outfile dist/vakt
+
+      - name: Run binary smoke tests
+        run: |
+          export AGENTS_SECRETS_BACKEND=env
+          bats tests/e2e/binary.bats
+
+      - name: Test CLI commands
+        run: |
+          export PATH="$HOME/.bun/bin:$PATH"
+          export AGENTS_DIR="$HOME/.agents-test"
+          export AGENTS_SECRETS_BACKEND=env
+
+          bun run src/index.ts init
+          [ -d "$AGENTS_DIR" ]
+          [ -f "$AGENTS_DIR/config.json" ]
+
+          bun run src/index.ts config list
+          bun run src/index.ts config set paths.code ~/Projects
+
+          bun run src/index.ts secrets set TEST_KEY "test_value"
+          [ "$(bun run src/index.ts secrets get TEST_KEY)" = "test_value" ]
+
+          bun run src/index.ts add-server test npx -y test-mcp
+          bun run src/index.ts list servers | grep -q "test"
+
+          bun run src/index.ts list
+
+  ci-passed:
+    name: ci-passed
+    needs:
+      - workflow-security
+      - build
+      - lint
+      - test
+      - security
+      - mutation
+      - agents-md-lint
+      - docker-e2e
+      - test-macos
+      - test-linux
+      - codeql
+      - sonar-scan
+      - sonarcloud
+      - sonar-zero-open-issues
+    if: always()
+    uses: osloer-industries/.github/.github/workflows/ci-passed.yml@348b254ef112f4f8e239a41e7adb3f3e2dac3944 # v0.1.6
+    with:
+      needs-json: ${{ toJSON(needs) }}
