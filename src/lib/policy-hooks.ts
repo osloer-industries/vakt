@@ -1,6 +1,7 @@
 import { existsSync, readFileSync, writeFileSync, mkdirSync, unlinkSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { expandHome } from "./config";
+import { expandHome, loadProviders } from "./config";
+import { resolveProviderInstructionsPath } from "./instructions";
 import type { Policy, ToolPermission } from "./schemas";
 import { serializeToolPermission } from "./permissions";
 
@@ -95,10 +96,16 @@ function updateAgentsMd(agentsMdPath: string, policyContext: string, dryRun: boo
   return { written: true, path: agentsMdPath, action: existed ? "updated" : "created" };
 }
 
+function hookAgentsMdPath(providerId: "opencode" | "vibe", fallback: string): string {
+  const provider = loadProviders()[providerId];
+  if (!provider) return expandHome(fallback);
+  return resolveProviderInstructionsPath(provider) ?? expandHome(fallback);
+}
+
 export function syncOpenCodeAgentsMd(policy: Policy | null, dryRun: boolean): HookResult {
   const allow = policy?.tools?.allow ?? [];
   const deny = policy?.tools?.deny ?? [];
-  const agentsMdPath = expandHome("~/.config/opencode/AGENTS.md");
+  const agentsMdPath = hookAgentsMdPath("opencode", "~/.config/opencode/AGENTS.md");
   
   if (allow.length + deny.length === 0) {
     if (!existsSync(agentsMdPath)) {
@@ -128,7 +135,7 @@ export function syncOpenCodeAgentsMd(policy: Policy | null, dryRun: boolean): Ho
 export function syncMistralAgentsMd(policy: Policy | null, dryRun: boolean): HookResult {
   const allow = policy?.tools?.allow ?? [];
   const deny = policy?.tools?.deny ?? [];
-  const agentsMdPath = expandHome("~/.vibe/AGENTS.md");
+  const agentsMdPath = hookAgentsMdPath("vibe", "~/.vibe/AGENTS.md");
   
   if (allow.length + deny.length === 0) {
     if (!existsSync(agentsMdPath)) {

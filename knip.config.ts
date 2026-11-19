@@ -1,6 +1,8 @@
 import type { KnipConfig } from "knip";
 
 const config: KnipConfig = {
+  // Stryker's command test runner is built into @stryker-mutator/core (no separate package).
+  ignore: ["stryker.config.mjs"],
   // entry inferred from package.json bin field (src/index.ts)
   // scripts/*.ts are standalone bun run scripts
   // test files are entry points for bun test
