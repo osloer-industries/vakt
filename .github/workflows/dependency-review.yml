@@ -12,4 +12,9 @@ concurrency:
 
 jobs:
   review:
-    uses: osloer-industries/.github/.github/workflows/dependency-review.yml@d4865a4b2c70c8433188f5200beac104b1c7fe86 # main
+    permissions:
+      contents: read
+      actions: read
+      pull-requests: read
+      security-events: write
+    uses: osloer-industries/.github/.github/workflows/dependency-review.yml@348b254ef112f4f8e239a41e7adb3f3e2dac3944 # v0.1.6
