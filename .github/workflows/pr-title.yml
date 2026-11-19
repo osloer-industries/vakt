@@ -1,0 +1,18 @@
+name: Pull request title
+
+on:
+  pull_request:
+    types: [opened, reopened, edited, synchronize]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pr-title-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  semantic-title:
+    uses: osloer-industries/.github/.github/workflows/semantic-pull-request.yml@348b254ef112f4f8e239a41e7adb3f3e2dac3944 # v0.1.6
+    permissions:
+      pull-requests: read
