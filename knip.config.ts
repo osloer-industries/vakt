@@ -10,7 +10,6 @@ const config: KnipConfig = {
   project: ["src/**/*.ts", "scripts/**/*.ts"],
   ignoreBinaries: [
     "bats",   // system test runner, not a package
-    "cosign", // optional supply-chain verifier invoked at runtime
     "eslint", // called in scripts, provided by devDependency eslint
     "knip",   // called in scripts, provided by devDependency knip
   ],
