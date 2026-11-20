@@ -31,8 +31,7 @@ updates:
       - "dependencies"
       - "github-actions"
     commit-message:
-      prefix: "ci"
-      include: "scope"
+      prefix: "ci(deps)"
     groups:
       osloer-reusables:
         patterns:

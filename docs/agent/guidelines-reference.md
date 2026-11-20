@@ -201,7 +201,7 @@ Org-wide rules live in the **Agent workflow** block in `AGENTS.md`. Workflows un
 
 | Workflow | Role |
 |----------|------|
-| `ci.yml` | Org reusables + Bun quality jobs + docker/cross-platform e2e + Sonar aggregate `sonarcloud` |
+| `ci.yml` | Org reusables + Bun quality jobs + docker/cross-platform e2e + `sonar-analyze` / zero-issues |
 | `dependency-review.yml` | Org reusable |
 | `pr-title.yml` | Semantic PR titles |
 | `release.yml` | semantic-release + Homebrew formula |
