@@ -1,7 +1,7 @@
 import type { Command } from "commander";
 import { existsSync, mkdirSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { spawnSync } from "node:child_process";
+import { execFileSync } from "node:child_process";
 import { loadAgentConfig } from "../lib/config";
 import { SkillsIndexSchema, type SkillsIndexEntry } from "../lib/schemas";
 import { verifyPackage } from "../lib/verify";
@@ -9,6 +9,7 @@ import {
   assertSafeSkillName,
   resolveWritableFileUnderRoots,
   userPathRoots,
+  validatedHttpsGitRemote,
 } from "../lib/safe-input";
 import { requireExecutable, safeSpawnEnv } from "../lib/safe-exec";
 
@@ -74,13 +75,15 @@ function installSkill(entry: SkillsIndexEntry, agentsDir: string): boolean {
       return false;
     }
     info(`Cloning ${entry.name} from ${entry.url}...`);
+    const remote = validatedHttpsGitRemote(entry.url);
     const git = requireExecutable("git");
-    const r = spawnSync(git, ["clone", "--depth", "1", entry.url, dest], {
-      encoding: "utf-8",
-      stdio: "inherit",
-      env: safeSpawnEnv(),
-    });
-    if (r.status !== 0) {
+    try {
+      execFileSync(git, ["clone", "--depth", "1", remote, dest], {
+        encoding: "utf-8",
+        stdio: "inherit",
+        env: safeSpawnEnv(),
+      });
+    } catch {
       console.error(`Failed to clone ${entry.name}`);
       return false;
     }

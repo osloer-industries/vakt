@@ -29,6 +29,20 @@ function rootPrefix(root: string): string {
   return real.endsWith("/") ? real : `${real}/`;
 }
 
+/** Prefix check on resolved paths without following symlinks on the candidate path. */
+function ensureUnderAllowedRootsLogical(logicalPath: string, allowedRoots: readonly string[]): string {
+  const abs = resolve(logicalPath);
+  assertSafePath(abs);
+  for (const root of allowedRoots) {
+    const prefix = rootPrefix(root);
+    const base = prefix.slice(0, -1);
+    if (abs === base || abs.startsWith(prefix)) {
+      return abs;
+    }
+  }
+  throw new Error("Path is outside allowed directories");
+}
+
 /** Ensure a resolved path stays within one of the allowed directory roots. */
 export function ensureUnderAllowedRoots(resolvedPath: string, allowedRoots: readonly string[]): string {
   const real = realpathSync.native(resolvedPath);
@@ -119,9 +133,10 @@ export function resolveWritableFileUnderRoots(userPath: string, allowedRoots: re
 
   let probe = dirname(abs);
   let boundedDir: string | undefined;
+  const parentDir = dirname(abs);
   while (boundedDir === undefined) {
     if (existsSync(probe)) {
-      boundedDir = ensureUnderAllowedRoots(realpathSync.native(probe), allowedRoots);
+      boundedDir = ensureUnderAllowedRootsLogical(resolve(probe), allowedRoots);
       break;
     }
     const parent = dirname(probe);
@@ -131,7 +146,7 @@ export function resolveWritableFileUnderRoots(userPath: string, allowedRoots: re
     probe = parent;
   }
 
-  const relParts = relative(boundedDir, dirname(abs)).split(sep).filter((part) => part.length > 0);
+  const relParts = relative(boundedDir, parentDir).split(sep).filter((part) => part.length > 0 && part !== "..");
   for (const part of relParts) {
     assertSafePathSegment(part);
   }
@@ -185,7 +200,7 @@ export function assertSafeSkillName(name: string): string {
   return base;
 }
 
-export { assertGitRemoteUrl } from "./safe-input-git";
+export { assertGitRemoteUrl, validatedHttpsGitRemote } from "./safe-input-git";
 export {
   assertDockerImageRef,
   assertOciReference,

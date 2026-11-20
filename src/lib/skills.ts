@@ -1,5 +1,5 @@
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
-import { basename, dirname, join, resolve } from "node:path";
+import { basename, join, resolve, sep } from "node:path";
 import { spawnSync } from "node:child_process";
 import { assertSafePath } from "./safe-input";
 import { AGENTS_DIR } from "./config";
@@ -347,15 +347,22 @@ export function pullSkill(skillDir: string): boolean {
   return result.status === 0;
 }
 
-function writeRootsForSkillFile(filePath: string): readonly string[] {
-  const parent = resolve(dirname(filePath));
-  return [parent, ...userPathRoots(AGENTS_DIR)];
+function writeRootsForSkillDir(skillDir: string): readonly string[] {
+  const roots = userPathRoots(AGENTS_DIR);
+  const dir = resolve(skillDir);
+  for (const root of roots) {
+    const base = resolve(root);
+    if (dir === base || dir.startsWith(`${base}${sep}`)) {
+      return roots;
+    }
+  }
+  return [dir, ...roots];
 }
 
 export function setSkillGlobal(skillDir: string, value: boolean): void {
   assertSafePath(skillDir);
   const skillMd = join(skillDir, "SKILL.md");
-  const writeRoots = writeRootsForSkillFile(skillMd);
+  const writeRoots = writeRootsForSkillDir(skillDir);
   if (!existsSync(skillMd)) {
     writeUtf8FileAtomic(
       skillMd,
