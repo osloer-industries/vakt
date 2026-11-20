@@ -1,9 +1,10 @@
 import { describe, it, expect, beforeEach } from "bun:test";
 import { join } from "path";
 import { rmSync } from "fs";
+import { expectAt, expectDefined, expectEnv } from "./test-assert";
 import { AuditStore } from "./audit";
 
-const DB = join(process.env["AGENTS_DIR"]!, "audit.db");
+const DB = join(expectEnv("AGENTS_DIR"), "audit.db");
 
 describe("AuditStore", () => {
   let store: AuditStore;
@@ -23,15 +24,17 @@ describe("AuditStore", () => {
     });
     const rows = store.query({ serverName: "github", limit: 10 });
     expect(rows).toHaveLength(1);
-    expect(rows[0]!.tool_name).toBe("list_repos");
-    expect(rows[0]!.duration_ms).toBeGreaterThanOrEqual(80);
+    const row = expectAt(rows, 0, "tool call row");
+    expect(row.tool_name).toBe("list_repos");
+    expect(row.duration_ms).toBeGreaterThanOrEqual(80);
   });
 
   it("records a sync event", () => {
     store.recordSync({ providers: ["cursor", "gemini"], servers: ["github"], dryRun: false });
     const syncs = store.recentSyncs(5);
     expect(syncs).toHaveLength(1);
-    expect(JSON.parse(syncs[0]!.providers as string)).toContain("cursor");
+    const providers = JSON.parse(expectAt(syncs, 0, "sync row").providers);
+    expect(providers).toContain("cursor");
   });
 
   it("filters tool calls by time window", () => {
@@ -58,7 +61,7 @@ describe("AuditStore", () => {
 });
 
 describe("AuditStore — sandbox sessions", () => {
-  const SESSION_DB = join(process.env["AGENTS_DIR"]!, "agent-session-test.db");
+  const SESSION_DB = join(expectEnv("AGENTS_DIR"), "agent-session-test.db");
   let store: AuditStore;
 
   beforeEach(() => {
@@ -79,16 +82,17 @@ describe("AuditStore — sandbox sessions", () => {
 
     const session = store.getSession(id);
     expect(session).not.toBeNull();
-    expect(session!.provider).toBe("docker");
-    expect(session!.container_id).toBe("abc123");
-    expect(session!.status).toBe("running");
+    const row = expectDefined(session, "sandbox session");
+    expect(row.provider).toBe("docker");
+    expect(row.container_id).toBe("abc123");
+    expect(row.status).toBe("running");
   });
 
   it("closes a session", () => {
     const id = store.createSession({ provider: "docker", containerId: "def456" });
     store.closeSession(id);
     const session = store.getSession(id);
-    expect(session!.status).toBe("closed");
+    expect(expectDefined(session, "sandbox session").status).toBe("closed");
   });
 
   it("lists running sessions", () => {

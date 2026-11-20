@@ -1,17 +1,30 @@
-import { spawnSync } from "node:child_process";
+import { existsSync } from "node:fs";
+import { join } from "node:path";
 import { assertSafePath } from "./safe-input";
+import { envRecord } from "./type-guards";
 
 /** Fixed PATH for subprocess lookup — never trust process.env.PATH for spawning. */
 export const SAFE_PATH = "/usr/local/bin:/usr/bin:/bin:/opt/homebrew/bin";
 
-function whichBinary(): string {
-  return process.platform === "win32"
-    ? String.raw`C:\Windows\System32\where.exe`
-    : "/usr/bin/which";
+const TRUSTED_BIN_DIRS = ["/opt/homebrew/bin", "/usr/local/bin", "/usr/bin", "/bin"] as const;
+
+/**
+ * Resolve a bare executable name by scanning trusted bin directories (no shell / which).
+ */
+function lookupExecutableInTrustedDirs(cmd: string): string | null {
+  if (!/^[\w.-]+$/.test(cmd)) return null;
+  for (const dir of TRUSTED_BIN_DIRS) {
+    const candidate = join(dir, cmd);
+    if (existsSync(candidate)) {
+      assertSafePath(candidate);
+      return candidate;
+    }
+  }
+  return null;
 }
 
 /**
- * Resolve an executable name to an absolute path using a fixed PATH.
+ * Resolve an executable name to an absolute path using trusted directories only.
  * Returns null if not found or the name is unsafe.
  */
 export function resolveExecutable(cmd: string): string | null {
@@ -23,26 +36,13 @@ export function resolveExecutable(cmd: string): string | null {
     }
     return cmd;
   }
-  if (!/^[\w.-]+$/.test(cmd)) return null;
-
-  const lookup = whichBinary();
-  const r = spawnSync(lookup, [cmd], {
-    encoding: "utf-8",
-    env: { PATH: SAFE_PATH },
-  });
-  if (r.status !== 0) return null;
-  const line = r.stdout.trim().split(/\r?\n/)[0]?.trim();
-  if (!line) return null;
-  if (process.platform !== "win32") {
-    assertSafePath(line);
-  }
-  return line;
+  return lookupExecutableInTrustedDirs(cmd);
 }
 
 /** Environment for child processes that must not inherit a writable PATH. */
 export function safeSpawnEnv(extra?: Record<string, string>): Record<string, string> {
   return {
-    ...(process.env as Record<string, string>),
+    ...envRecord(),
     ...extra,
     PATH: SAFE_PATH,
   };

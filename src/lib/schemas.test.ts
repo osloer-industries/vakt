@@ -1,4 +1,5 @@
 import { describe, test, expect } from "bun:test";
+import { expectDefined } from "./test-assert";
 import { McpConfigSchema, ToolPermissionSchema, PolicySchema, KNOWN_TOOLS } from "./schemas";
 
 describe("McpConfigSchema global field", () => {
@@ -6,21 +7,21 @@ describe("McpConfigSchema global field", () => {
     const result = McpConfigSchema.parse({
       "my-server": { command: "npx", args: ["-y", "some-mcp"], global: true },
     });
-    expect(result["my-server"]!.global).toBe(true);
+    expect(expectDefined(result["my-server"], "my-server").global).toBe(true);
   });
 
   test("stdio server defaults global to false", () => {
     const result = McpConfigSchema.parse({
       "my-server": { command: "npx" },
     });
-    expect(result["my-server"]!.global).toBe(false);
+    expect(expectDefined(result["my-server"], "my-server").global).toBe(false);
   });
 
   test("http server accepts global: true", () => {
     const result = McpConfigSchema.parse({
       "my-server": { transport: "http", url: "https://example.com/mcp", global: true },
     });
-    expect(result["my-server"]!.global).toBe(true);
+    expect(expectDefined(result["my-server"], "my-server").global).toBe(true);
   });
 
   test("_note key is stripped from config", () => {
@@ -123,7 +124,7 @@ describe("PolicySchema tools field", () => {
       ...base,
       tools: { allow: ["Bash(npm run *)", "WebFetch(domain:npmjs.com)"] },
     });
-    expect(policy.tools?.allow?.[0]).toEqual({ tool: "Bash", specifier: "npm run *" });
-    expect(policy.tools?.allow?.[1]).toEqual({ tool: "WebFetch", specifier: "domain:npmjs.com" });
+    expect(expectDefined(policy.tools?.allow?.[0], "allow[0]")).toEqual({ tool: "Bash", specifier: "npm run *" });
+    expect(expectDefined(policy.tools?.allow?.[1], "allow[1]")).toEqual({ tool: "WebFetch", specifier: "domain:npmjs.com" });
   });
 });

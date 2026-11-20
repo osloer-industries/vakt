@@ -2,9 +2,10 @@ import { describe, it, expect, beforeEach } from "bun:test";
 import { writeFileSync, mkdirSync, rmSync, existsSync } from "fs";
 import { join } from "path";
 import { PolicyEngine, loadPolicy, loadMergedPolicy, mergePolicies } from "./policy";
-import type { Policy } from "./schemas";
+import { PolicySchema, type Policy } from "./schemas";
+import { expectEnv } from "./test-assert";
 
-const AGENTS = process.env["AGENTS_DIR"]!;
+const AGENTS = expectEnv("AGENTS_DIR");
 
 const strict: Policy = {
   version: "1",
@@ -181,9 +182,9 @@ describe("mergePolicies", () => {
 
   it("_meta key from local is never applied", () => {
     const remote: Policy = { ...base };
-    const local = { ...base, _meta: { lockedKeys: ["default"] } } as unknown as Policy;
+    const local = PolicySchema.parse({ ...base, _meta: { lockedKeys: ["default"] } });
     const merged = mergePolicies(remote, local);
-    expect((merged as any)._meta).toBeUndefined();
+    expect(merged["_meta"]).toBeUndefined();
   });
 });
 
@@ -209,7 +210,7 @@ describe("PolicyEngine.checkPath", () => {
       version: "1", default: "deny", registryPolicy: "allow-unverified",
       servers: { fs: { paths: { allow: ["~/projects"] } } },
     };
-    const home = process.env["HOME"]!;
+    const home = expectEnv("HOME");
     expect(new PolicyEngine(p).checkPath("fs", `${home}/projects/app`).result).toBe("allow");
   });
 
@@ -237,7 +238,7 @@ describe("PolicyEngine.registryPolicy", () => {
   });
 
   it("defaults to allow-unverified when registryPolicy is undefined", () => {
-    const p = { version: "1" as const, default: "allow" as const } as Policy;
+    const p = PolicySchema.parse({ version: "1", default: "allow" });
     expect(new PolicyEngine(p).registryPolicy).toBe("allow-unverified");
   });
 });

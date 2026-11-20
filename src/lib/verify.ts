@@ -1,12 +1,22 @@
+import { z } from "zod";
 import { assertNpmPackageName } from "./safe-input";
 import { requireExecutable } from "./safe-exec";
 import { runCosignVerify, type CosignVerifyOutput } from "./verify-cosign";
+import { NpmAttestationsResponseSchema } from "./schemas";
 
 export type VerifyResult =
   | { ok: true; signer: string; source: string }
   | { ok: false; reason: string };
 
 const NPM_REGISTRY = "https://registry.npmjs.org";
+
+const CosignAttestationRowSchema = z.object({
+  optional: z
+    .object({
+      Subject: z.string().optional(),
+    })
+    .optional(),
+});
 
 function cmdAvailable(cmd: string): boolean {
   try {
@@ -30,16 +40,15 @@ export function verifyOci(identifier: string): VerifyResult {
   if (r.status === 0) {
     let signer = "verified";
     try {
-      const data = JSON.parse(r.stdout) as unknown[];
-      if (Array.isArray(data) && data.length > 0) {
-        const first = data[0] as Record<string, unknown>;
-        const optional = first["optional"] as Record<string, unknown> | undefined;
-        signer = (optional?.["Subject"] as string | undefined) ?? "verified";
+      const parsed: unknown = JSON.parse(r.stdout);
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        const first = CosignAttestationRowSchema.safeParse(parsed[0]);
+        signer = first.success ? (first.data.optional?.Subject ?? "verified") : "verified";
       }
     } catch { /* ignore */ }
     return { ok: true, signer, source: "cosign" };
   }
-  const reason = ((r.stderr as string) || (r.stdout as string)).trim();
+  const reason = (r.stderr || r.stdout).trim();
   return { ok: false, reason: `cosign verify failed: ${reason}` };
 }
 
@@ -74,7 +83,8 @@ export async function verifyNpm(identifier: string, version?: string): Promise<V
       if (resp.status === 404) return { ok: false, reason: `No attestations found for ${pkg}` };
       return { ok: false, reason: `npm registry error: HTTP ${resp.status}` };
     }
-    const data = (await resp.json()) as { attestations?: Array<{ predicateType?: string; bundleMediaType?: string }> };
+    const body: unknown = await resp.json();
+    const data = NpmAttestationsResponseSchema.parse(body);
     const attestations = data.attestations ?? [];
     if (attestations.length === 0) return { ok: false, reason: `No attestations for ${pkg}` };
 

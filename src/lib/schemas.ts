@@ -1,5 +1,9 @@
 import { z } from "zod";
 
+function isPlainRecord(input: unknown): input is Record<string, unknown> {
+  return typeof input === "object" && input !== null && !Array.isArray(input);
+}
+
 // ── Platform ─────────────────────────────────────────────────────────────────
 
 export const PLATFORMS = ["darwin", "linux", "win32"] as const;
@@ -44,9 +48,9 @@ export const McpServerSchema = z.union([StdioServerSchema, HttpServerSchema]);
 
 export const McpConfigSchema = z.preprocess(
   (input) => {
-    if (input !== null && typeof input === "object" && !Array.isArray(input)) {
+    if (isPlainRecord(input)) {
       return Object.fromEntries(
-        Object.entries(input as Record<string, unknown>).filter(([k]) => !k.startsWith("_"))
+        Object.entries(input).filter(([k]) => !k.startsWith("_"))
       );
     }
     return input;
@@ -290,6 +294,16 @@ export const ProviderSchema = z
 
 export const ProvidersSchema = z.record(z.string(), ProviderSchema);
 
+export const HookProviderIdSchema = z.enum([
+  "claude",
+  "cursor",
+  "gemini",
+  "codex",
+  "windsurf",
+  "vibe",
+  "opencode",
+]);
+
 export type StdioServer = z.infer<typeof StdioServerSchema>;
 export type HttpServer = z.infer<typeof HttpServerSchema>;
 export type McpServer = z.infer<typeof McpServerSchema>;
@@ -356,8 +370,9 @@ export const ToolPermissionSchema = z
     { message: 'MCP tool rules (mcp__*) belong in policy.servers, not policy.tools' }
   )
   .transform((s): ToolPermission => {
-    const m = TOOL_PERMISSION_RE.exec(s)!;
-    const tool = m[1]!;
+    const m = TOOL_PERMISSION_RE.exec(s);
+    if (m === null) return { tool: s };
+    const tool = m[1] ?? s;
     const specifier = m[2];
     return specifier === undefined ? { tool } : { tool, specifier };
   });
@@ -414,3 +429,163 @@ export const PolicySchema = z.object({
 
 export type PolicyServerRules = z.infer<typeof PolicyServerRulesSchema>;
 export type Policy = z.infer<typeof PolicySchema>;
+
+// ── MCP registry API ──────────────────────────────────────────────────────────
+
+const RegistryPackageSchema = z.object({
+  registryType: z.enum(["npm", "oci"]),
+  identifier: z.string(),
+  version: z.string().optional(),
+  runtimeHint: z.string().optional(),
+  runtimeArguments: z.array(z.object({ value: z.string() })).optional(),
+  packageArguments: z.array(z.object({ value: z.string() })).optional(),
+  environmentVariables: z
+    .array(z.object({ name: z.string(), isSecret: z.boolean().optional(), isRequired: z.boolean().optional() }))
+    .optional(),
+});
+
+export const RegistryEntrySchema = z.object({
+  server: z.object({
+    name: z.string(),
+    description: z.string().optional(),
+    version: z.string().optional(),
+    packages: z.array(RegistryPackageSchema).optional(),
+    remotes: z.array(z.object({ type: z.string(), url: z.string() })).optional(),
+  }),
+});
+
+export const RegistrySearchResponseSchema = z.object({
+  servers: z.array(RegistryEntrySchema).optional(),
+});
+
+export type RegistryEntry = z.infer<typeof RegistryEntrySchema>;
+
+// ── Audit store rows ──────────────────────────────────────────────────────────
+
+export const ToolCallRowSchema = z.object({
+  id: z.number(),
+  session_id: z.string().nullable(),
+  server_name: z.string(),
+  tool_name: z.string(),
+  runtime: z.string().nullable(),
+  provider: z.string().nullable(),
+  policy_result: z.string().nullable(),
+  policy_rule: z.string().nullable(),
+  started_at: z.number(),
+  ended_at: z.number().nullable(),
+  duration_ms: z.number().nullable(),
+  response_ok: z.number().nullable(),
+  error_code: z.string().nullable(),
+});
+
+export const SyncEventRowSchema = z.object({
+  id: z.number(),
+  synced_at: z.number(),
+  providers: z.string(),
+  servers: z.string(),
+  dry_run: z.number(),
+});
+
+export const SandboxSessionRowSchema = z.object({
+  id: z.string(),
+  provider: z.string(),
+  container_id: z.string(),
+  image: z.string().nullable(),
+  repo: z.string().nullable(),
+  name: z.string().nullable(),
+  status: z.string(),
+  created_at: z.number(),
+  closed_at: z.number().nullable(),
+});
+
+export const RoutingEventRowSchema = z.object({
+  id: z.number(),
+  routed_at: z.number(),
+  backend: z.string(),
+  prompt_tokens: z.number(),
+  tool_count: z.number(),
+  has_code: z.number(),
+  has_math: z.number(),
+  matched_rule: z.number().nullable(),
+  latency_ms: z.number().nullable(),
+});
+
+export type ToolCallRow = z.infer<typeof ToolCallRowSchema>;
+export type SyncEventRow = z.infer<typeof SyncEventRowSchema>;
+export type SandboxSessionRow = z.infer<typeof SandboxSessionRowSchema>;
+export type RoutingEventRow = z.infer<typeof RoutingEventRowSchema>;
+
+// ── Daemon IPC ────────────────────────────────────────────────────────────────
+
+export const DaemonCmdSchema = z.discriminatedUnion("type", [
+  z.object({ type: z.literal("status") }),
+  z.object({ type: z.literal("servers/list") }),
+  z.object({ type: z.literal("servers/restart"), name: z.string() }),
+  z.object({
+    type: z.literal("audit/query"),
+    serverName: z.string().optional(),
+    limit: z.number().optional(),
+  }),
+]);
+
+export const DaemonResponseSchema = z.union([
+  z.object({ ok: z.literal(true), data: z.unknown() }),
+  z.object({ ok: z.literal(false), error: z.string() }),
+]);
+
+export type DaemonCmd = z.infer<typeof DaemonCmdSchema>;
+export type DaemonResponse = z.infer<typeof DaemonResponseSchema>;
+
+export const DaemonStatusDataSchema = z.object({
+  pid: z.number(),
+  servers: z.record(
+    z.string(),
+    z.object({
+      status: z.string(),
+      pid: z.number().optional(),
+      restarts: z.number().optional(),
+    }),
+  ),
+});
+
+// ── JSON-RPC (stdio MCP transport) ────────────────────────────────────────────
+
+export const JsonRpcFrameSchema = z.object({
+  jsonrpc: z.literal("2.0"),
+  id: z.unknown().optional(),
+  method: z.string().optional(),
+  params: z.record(z.string(), z.unknown()).optional(),
+  result: z.unknown().optional(),
+  error: z.unknown().optional(),
+});
+
+export type JsonRpcFrame = z.infer<typeof JsonRpcFrameSchema>;
+
+// ── Provider hook config ──────────────────────────────────────────────────────
+
+export const HookConfigSchema = z.object({
+  hooks: z
+    .array(
+      z.object({
+        name: z.string(),
+        command: z.string(),
+        events: z.array(z.string()),
+      }),
+    )
+    .optional(),
+});
+
+export type HookConfig = z.infer<typeof HookConfigSchema>;
+
+// ── NPM attestations (verify) ─────────────────────────────────────────────────
+
+export const NpmAttestationsResponseSchema = z.object({
+  attestations: z
+    .array(
+      z.object({
+        predicateType: z.string().optional(),
+        bundleMediaType: z.string().optional(),
+      }),
+    )
+    .optional(),
+});
