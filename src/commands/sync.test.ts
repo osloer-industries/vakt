@@ -1,5 +1,5 @@
 import { describe, test, expect, beforeEach, afterEach } from "bun:test";
-import { writeFileSync, mkdirSync, mkdtempSync, rmSync } from "node:fs";
+import { writeFileSync, mkdirSync, mkdtempSync, rmSync, existsSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { filterGlobal, getUnclassifiedServers, getUnclassifiedSkills, refreshSkills } from "./sync";
 import type { McpConfig } from "../lib/schemas";
@@ -120,23 +120,27 @@ describe("refreshSkills", () => {
   afterEach(() => rmSync(tmp, { recursive: true, force: true }));
 
   test("returns early (no throw) when skills dir does not exist", async () => {
-    await refreshSkills(tmp, false);
+    await expect(refreshSkills(tmp, false)).resolves.toBeUndefined();
+    expect(existsSync(join(tmp, "skills"))).toBe(false);
   });
 
   test("returns early (no throw) in dry-run when skills dir does not exist", async () => {
-    await refreshSkills(tmp, true);
+    await expect(refreshSkills(tmp, true)).resolves.toBeUndefined();
+    expect(existsSync(join(tmp, "skills"))).toBe(false);
   });
 
   test("completes without error when skills dir exists but is empty", async () => {
     mkdirSync(join(tmp, "skills"), { recursive: true });
-    await refreshSkills(tmp, true);
+    await expect(refreshSkills(tmp, true)).resolves.toBeUndefined();
+    expect(readdirSync(join(tmp, "skills"))).toEqual([]);
   });
 
   test("completes without error when skills dir has a non-git directory", async () => {
     const skillDir = join(tmp, "skills", "my-skill");
     mkdirSync(skillDir, { recursive: true });
     writeFileSync(join(skillDir, "SKILL.md"), "---\nname: my-skill\nglobal: true\n---\n");
-    await refreshSkills(tmp, true);
+    await expect(refreshSkills(tmp, true)).resolves.toBeUndefined();
+    expect(existsSync(join(skillDir, "SKILL.md"))).toBe(true);
   });
 });
 

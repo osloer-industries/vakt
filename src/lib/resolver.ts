@@ -183,8 +183,7 @@ export function toToml(data: Record<string, unknown>, _indent = 0): string {
     else if (typeof v === "number" || typeof v === "boolean") lines.push(`${k} = ${v}`);
     else if (Array.isArray(v)) lines.push(`${k} = ${JSON.stringify(v)}`);
     else if (isRecord(v)) {
-      lines.push(`\n[${k}]`);
-      lines.push(toToml(v));
+      lines.push(`\n[${k}]`, toToml(v));
     }
   }
   return lines.join("\n");

@@ -100,7 +100,7 @@ export function nestedRecordSet(obj: Record<string, unknown>, dotKey: string, va
     if (!isRecord(child)) return;
     cur = child;
   }
-  const last = parts[parts.length - 1];
+  const last = parts.at(-1);
   if (last !== undefined && !isPrototypePollutionKey(last)) cur[last] = value;
 }
 
@@ -110,6 +110,6 @@ export function mcpServerHasRegistry(server: unknown): boolean {
 
 /** Deep-clone a JSON-serialisable value into a plain record (strips non-JSON fields). */
 export function cloneJsonRecord(value: unknown): Record<string, unknown> {
-  const cloned: unknown = JSON.parse(JSON.stringify(value));
+  const cloned: unknown = structuredClone(value);
   return isRecord(cloned) ? cloned : {};
 }

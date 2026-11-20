@@ -28,6 +28,6 @@ describe("recordToolCallSpan", () => {
 
 describe("shutdownOtel", () => {
   it("resolves without error when no SDK was initialised", async () => {
-    await shutdownOtel();
+    await expect(shutdownOtel()).resolves.toBeUndefined();
   });
 });

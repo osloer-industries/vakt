@@ -33,7 +33,8 @@ describe("env backend CRUD", () => {
   });
 
   it("delete is idempotent — no throw when key missing", async () => {
-    await secretsDelete("NEVER_SET_KEY_ABC");
+    await expect(secretsDelete("NEVER_SET_KEY_ABC")).resolves.toBeUndefined();
+    expect(await secretsGet("NEVER_SET_KEY_ABC")).toBeNull();
   });
 
   it("list returns stored keys", async () => {

@@ -12,13 +12,18 @@ import { makePermissionsAdapter } from "../lib/permissions";
 import { syncPolicyHooks } from "../lib/policy-hooks";
 import { AuditStore } from "../lib/audit";
 import {
-  resolveAll, formatForProvider, writeJsonConfig, writeTomlConfig, syncSkills,
-  isResolvedStdioServer, type ResolvedServer,
+  resolveAll,
+  formatForProvider,
+  writeJsonConfig,
+  writeTomlConfig,
+  syncSkills,
+  isResolvedStdioServer,
+  type ResolvedServer,
+  type ResolvedConfig,
 } from "../lib/resolver";
 import { ensureProviderAgentsMd } from "../lib/instructions";
 import { fetchRemotePolicy, fetchRemoteMcpConfig, mergeRemoteMcp } from "../lib/remote";
 import type { AgentConfig } from "../lib/schemas";
-import type { ResolvedConfig } from "../lib/resolver";
 import type { Provider, McpConfig } from "../lib/schemas";
 import { HookProviderIdSchema } from "../lib/schemas";
 import type { Policy } from "../lib/schemas";

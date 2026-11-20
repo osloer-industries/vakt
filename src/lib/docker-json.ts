@@ -17,7 +17,7 @@ export function parseDockerExecExit(raw: unknown): number {
 
 export function parseDockerContainerList(raw: unknown): Array<{ Id: string; Labels: Record<string, string> }> {
   if (!Array.isArray(raw)) {
-    throw new Error("Docker container list response must be an array");
+    throw new TypeError("Docker container list response must be an array");
   }
   return raw.map((row) => DockerContainerRowSchema.parse(row));
 }

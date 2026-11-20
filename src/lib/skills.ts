@@ -1,10 +1,9 @@
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { basename, join, resolve, sep } from "node:path";
 import { spawnSync } from "node:child_process";
-import { assertSafePath } from "./safe-input";
+import { assertSafePath, userPathRoots } from "./safe-input";
 import { AGENTS_DIR } from "./config";
 import { writeUtf8FileAtomic } from "./atomic-write";
-import { userPathRoots } from "./safe-input";
 import { requireExecutable, safeSpawnEnv } from "./safe-exec";
 
 export { assertSafePath } from "./safe-input";

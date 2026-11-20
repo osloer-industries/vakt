@@ -1,6 +1,6 @@
 // src/commands/import.ts
 import { join } from "node:path";
-import { existsSync, mkdirSync, readdirSync, lstatSync, readFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, lstatSync, readFileSync, symlinkSync } from "node:fs";
 import type { Command } from "commander";
 import { AGENTS_DIR, loadMcpConfig, loadProviders, resolveProviderConfigPath, expandHome } from "../lib/config";
 import { assertSafeSkillName, resolveLocalDirectory, userPathRoots } from "../lib/safe-input";
@@ -109,7 +109,6 @@ async function linkSkillEntry(entry: string, skillsSource: string, skillsTarget:
   const dest = join(skillsTarget, safeEntry);
   if (!lstatSync(src).isDirectory()) return;
   if (existsSync(dest)) return;
-  const { symlinkSync } = await import("fs");
   mkdirSync(skillsTarget, { recursive: true });
   symlinkSync(src, dest);
   console.log(`  ✓  linked skill: ${entry}`);
