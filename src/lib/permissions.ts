@@ -1,5 +1,4 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { dirname } from "node:path";
+import { existsSync, readFileSync } from "node:fs";
 import { expandHome } from "./config";
 import { writeUtf8FileAtomic } from "./atomic-write";
 import { KNOWN_TOOLS, type ToolPermission } from "./schemas";
@@ -128,14 +127,8 @@ function mergeClaudePermissions(
 }
 
 function atomicWriteJson(resolvedPath: string, updated: ClaudeSettings): void {
-  const dir = dirname(resolvedPath);
-  if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
   const body = JSON.stringify(updated, null, 2) + "\n";
-  try {
-    writeUtf8FileAtomic(resolvedPath, body);
-  } catch {
-    writeFileSync(resolvedPath, body, { encoding: "utf-8" });
-  }
+  writeUtf8FileAtomic(resolvedPath, body);
 }
 
 export class ClaudeSettingsAdapter implements PermissionsAdapter {

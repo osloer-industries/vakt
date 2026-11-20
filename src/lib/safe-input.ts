@@ -1,5 +1,5 @@
-import { existsSync, readFileSync, realpathSync, statSync } from "node:fs";
-import { basename, resolve } from "node:path";
+import { existsSync, mkdirSync, readFileSync, realpathSync, statSync } from "node:fs";
+import { basename, dirname, join, resolve } from "node:path";
 import { homedir } from "node:os";
 
 /** Strip control characters for safe terminal/log output (log injection). */
@@ -92,6 +92,34 @@ export function resolveReadableFile(userPath: string, allowedRoots: readonly str
 /** Read a UTF-8 text file after path boundary validation. */
 export function readBoundedUtf8File(userPath: string, allowedRoots: readonly string[]): string {
   return readFileSync(resolveReadableFile(userPath, allowedRoots), "utf-8");
+}
+
+/**
+ * Resolve a writable file path to a canonical absolute path under the real parent directory.
+ * Used before atomic create/rename so temp and target paths cannot escape via symlinks or traversal.
+ */
+export function resolveBoundedWritableFile(userPath: string): string {
+  if (!userPath || userPath.includes("\0")) {
+    throw new Error("Invalid file path");
+  }
+  rejectParentPathSegments(userPath);
+  const abs = resolve(userPath);
+  assertSafePath(abs);
+  const name = basename(abs);
+  if (!name || name === "." || name === "..") {
+    throw new Error("Invalid file path");
+  }
+  let dir = dirname(abs);
+  if (existsSync(dir)) {
+    dir = realpathSync.native(dir);
+  } else {
+    mkdirSync(dir, { recursive: true });
+    dir = resolve(dir);
+  }
+  assertSafePath(dir);
+  const target = join(dir, name);
+  assertSafePath(target);
+  return target;
 }
 
 /** Resolve a user-supplied path to an absolute, existing directory under allowed roots. */

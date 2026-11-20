@@ -1,7 +1,8 @@
 import { describe, it, expect, beforeEach, afterEach } from "bun:test";
-import { mkdirSync, readFileSync, writeFileSync, rmSync, existsSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, existsSync } from "node:fs";
 import { join } from "node:path";
-import { tmpdir } from "node:os";
+import { homedir } from "node:os";
+import { writeUtf8FileAtomic } from "./atomic-write";
 import { ClaudeSettingsAdapter, serializeToolPermission } from "./permissions";
 import type { ToolPermission } from "./schemas";
 import { isRecord, parseJsonUnknown, readStringArray } from "./type-guards";
@@ -10,9 +11,7 @@ import { expectDefined } from "./test-assert";
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function tempDir(): string {
-  const dir = join(tmpdir(), `vakt-perm-test-${Math.random().toString(36).slice(2)}`);
-  mkdirSync(dir, { recursive: true });
-  return dir;
+  return mkdtempSync(join(homedir(), "vakt-perm-test-"));
 }
 
 function readSettingsJson(path: string): Record<string, unknown> {
@@ -99,7 +98,7 @@ describe("ClaudeSettingsAdapter", () => {
 
   it("preserves user-managed entries on second sync", () => {
     // Write initial user-managed entries
-    writeFileSync(
+    writeUtf8FileAtomic(
       settingsPath,
       JSON.stringify({
         permissions: {
@@ -167,7 +166,10 @@ describe("ClaudeSettingsAdapter", () => {
     const permissions = readPermissions(settings);
     const allowList = expectDefined(permissions?.allow, "permissions.allow");
     allowList.push("Agent(Explore)");
-    writeFileSync(settingsPath, JSON.stringify({ ...settings, permissions: { ...permissions, allow: allowList } }, null, 2) + "\n");
+    writeUtf8FileAtomic(
+      settingsPath,
+      JSON.stringify({ ...settings, permissions: { ...permissions, allow: allowList } }, null, 2) + "\n",
+    );
 
     // vakt syncs again with same policy
     adapter.apply(allow, deny, false);
@@ -189,7 +191,7 @@ describe("ClaudeSettingsAdapter", () => {
   });
 
   it("handles unparseable existing settings.json gracefully", () => {
-    writeFileSync(settingsPath, "not valid json");
+    writeUtf8FileAtomic(settingsPath, "not valid json");
     const adapter = new ClaudeSettingsAdapter(settingsPath);
     // Should not throw; should warn and treat as empty
     const result = adapter.apply(allow, deny, false);

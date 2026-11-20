@@ -84,12 +84,16 @@ export function nestedRecordGet(obj: unknown, dotKey: string): unknown {
   return dotKey.split(".").reduce<unknown>((acc, key) => (isRecord(acc) ? acc[key] : undefined), obj);
 }
 
+function isPrototypePollutionKey(key: string): boolean {
+  return key === "__proto__" || key === "constructor" || key === "prototype";
+}
+
 export function nestedRecordSet(obj: Record<string, unknown>, dotKey: string, value: unknown): void {
   const parts = dotKey.split(".");
   let cur = obj;
   for (let i = 0; i < parts.length - 1; i++) {
     const key = parts[i];
-    if (key === undefined) return;
+    if (key === undefined || isPrototypePollutionKey(key)) return;
     const next = cur[key];
     if (!isRecord(next)) cur[key] = {};
     const child = cur[key];
@@ -97,7 +101,7 @@ export function nestedRecordSet(obj: Record<string, unknown>, dotKey: string, va
     cur = child;
   }
   const last = parts[parts.length - 1];
-  if (last !== undefined) cur[last] = value;
+  if (last !== undefined && !isPrototypePollutionKey(last)) cur[last] = value;
 }
 
 export function mcpServerHasRegistry(server: unknown): boolean {

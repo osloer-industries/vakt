@@ -82,7 +82,9 @@ bun run ci:build && bun run ci:lint && bun run ci:test && bun run ci:security
   `mock_secrets_backend`.
 - Enforce policy only via `PolicyEngine` in `src/lib/policy.ts` — never inline checks in commands.
 - Never print or log secrets; mask as `***` in user-visible output.
-- Type escape hatches are banned (see [guidelines-reference](docs/agent/guidelines-reference.md#typescript)); fix violations with real types, guards, or Zod — never silence lint.
+- Type escape hatches are banned (see
+  [guidelines-reference](docs/agent/guidelines-reference.md#typescript)); fix violations with real types, guards, or
+  Zod — never silence lint.
 - When you add or change a command, update the feature catalog in `docs/agent/guidelines-reference.md` and
   `src/vakt.sh`.
 

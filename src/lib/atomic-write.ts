@@ -6,19 +6,18 @@ import {
   writeSync,
 } from "node:fs";
 import { basename, dirname, join } from "node:path";
-import { assertSafePath } from "./safe-input";
+import { randomBytes } from "node:crypto";
+import { assertSafePath, resolveBoundedWritableFile } from "./safe-input";
 
 /**
  * Atomically replace a UTF-8 file: write a temp file in the same directory, fsync, then rename.
- * Paths are validated before rename so Sonar path-manipulation rules are satisfied.
+ * Target and temp paths are resolved through {@link resolveBoundedWritableFile} before I/O.
  */
 export function writeUtf8FileAtomic(filePath: string, content: string): void {
-  assertSafePath(filePath);
-  assertSafePath(dirname(filePath));
-  const tmp = join(
-    dirname(filePath),
-    `.${basename(filePath)}.${process.pid}.${Date.now()}.tmp`,
-  );
+  const target = resolveBoundedWritableFile(filePath);
+  const dir = dirname(target);
+  assertSafePath(dir);
+  const tmp = join(dir, `.${basename(target)}.${randomBytes(16).toString("hex")}.tmp`);
   assertSafePath(tmp);
   const fd = openSync(tmp, "wx", 0o600);
   try {
@@ -27,5 +26,5 @@ export function writeUtf8FileAtomic(filePath: string, content: string): void {
   } finally {
     closeSync(fd);
   }
-  renameSync(tmp, filePath);
+  renameSync(tmp, target);
 }
