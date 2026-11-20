@@ -1,17 +1,8 @@
-import {
-  closeSync,
-  existsSync,
-  fsyncSync,
-  openSync,
-  readdirSync,
-  readFileSync,
-  renameSync,
-  statSync,
-  writeSync,
-} from "node:fs";
-import { join, basename, dirname } from "node:path";
+import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
+import { join, basename } from "node:path";
 import { spawnSync } from "node:child_process";
 import { assertSafePath } from "./safe-input";
+import { writeUtf8FileAtomic } from "./atomic-write";
 import { requireExecutable, safeSpawnEnv } from "./safe-exec";
 
 export { assertSafePath } from "./safe-input";
@@ -283,23 +274,6 @@ function cleanGitEnv(): NodeJS.ProcessEnv {
 
 function gitBinary(): string {
   return requireExecutable("git");
-}
-
-function writeUtf8FileAtomic(filePath: string, content: string): void {
-  assertSafePath(filePath);
-  assertSafePath(dirname(filePath));
-  const tmp = join(
-    dirname(filePath),
-    `.${basename(filePath)}.${process.pid}.${Date.now()}.tmp`,
-  );
-  const fd = openSync(tmp, "wx", 0o600);
-  try {
-    writeSync(fd, content, undefined, "utf-8");
-    fsyncSync(fd);
-  } finally {
-    closeSync(fd);
-  }
-  renameSync(tmp, filePath);
 }
 
 /**

@@ -1,7 +1,7 @@
-import { existsSync, readFileSync, writeFileSync, mkdirSync, renameSync, unlinkSync } from "node:fs";
-import { dirname, join } from "node:path";
-import { randomBytes } from "node:crypto";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { dirname } from "node:path";
 import { expandHome } from "./config";
+import { writeUtf8FileAtomic } from "./atomic-write";
 import { KNOWN_TOOLS, type ToolPermission } from "./schemas";
 import { isRecord, parseJsonUnknown } from "./type-guards";
 
@@ -131,13 +131,10 @@ function atomicWriteJson(resolvedPath: string, updated: ClaudeSettings): void {
   const dir = dirname(resolvedPath);
   if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
   const body = JSON.stringify(updated, null, 2) + "\n";
-  const tmp = join(dir, `.vakt-settings-${randomBytes(6).toString("hex")}.tmp`);
-  writeFileSync(tmp, body, { encoding: "utf-8" });
   try {
-    renameSync(tmp, resolvedPath); // NOSONAR — intentional atomic write
+    writeUtf8FileAtomic(resolvedPath, body);
   } catch {
     writeFileSync(resolvedPath, body, { encoding: "utf-8" });
-    try { unlinkSync(tmp); } catch { /* ignore */ }
   }
 }
 
