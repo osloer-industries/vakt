@@ -25,7 +25,8 @@ export function assertSafePath(p: string): void {
 }
 
 function rootPrefix(root: string): string {
-  const real = realpathSync.native(resolve(root));
+  const resolved = resolve(root);
+  const real = existsSync(resolved) ? realpathSync.native(resolved) : resolved;
   return real.endsWith("/") ? real : `${real}/`;
 }
 

@@ -9,6 +9,7 @@ setup() {
 
   # Use a named subdir so the skill name is predictable ("test-skill")
   TEST_SKILL_BASE="$(mktemp -d)"
+  export VAKT_EXTRA_PATH_ROOTS="${VAKT_EXTRA_PATH_ROOTS}:${TEST_SKILL_BASE}"
   TEST_SKILL_DIR="$TEST_SKILL_BASE/test-skill"
   mkdir -p "$TEST_SKILL_DIR"
   create_test_skill "$TEST_SKILL_DIR" "test-skill"

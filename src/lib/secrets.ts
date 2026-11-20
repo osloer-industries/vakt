@@ -1,5 +1,5 @@
 import { join } from "node:path";
-import { accessSync, chmodSync, constants, existsSync, readFileSync } from "node:fs";
+import { chmodSync, existsSync, readFileSync } from "node:fs";
 import { AGENTS_DIR } from "./config";
 
 type Backend = "keychain" | "pass" | "env";
@@ -28,16 +28,7 @@ async function run(cmd: string, args: string[]): Promise<{ stdout: string; ok: b
 }
 
 function keychainAccessible(): boolean {
-  if (process.platform !== "darwin") return false;
-  const home = process.env.HOME;
-  if (!home) return false;
-  const chain = join(home, "Library", "Keychains", "login.keychain-db");
-  try {
-    accessSync(chain, constants.R_OK);
-    return true;
-  } catch {
-    return false;
-  }
+  return process.platform === "darwin" && existsSync("/usr/bin/security");
 }
 
 function detectBackend(): Backend {
