@@ -11,3 +11,7 @@ export function expectAt<T>(items: readonly T[], index: number, label = `index $
   const value = items[index];
   return expectDefined(value, label);
 }
+
+export function expectEnv(name: string): string {
+  return expectDefined(process.env[name], `process.env[${name}]`);
+}

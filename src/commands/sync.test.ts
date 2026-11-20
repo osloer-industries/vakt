@@ -120,23 +120,23 @@ describe("refreshSkills", () => {
   afterEach(() => rmSync(tmp, { recursive: true, force: true }));
 
   test("returns early (no throw) when skills dir does not exist", async () => {
-    await expect(refreshSkills(tmp, false)).resolves.toBeUndefined();
+    await refreshSkills(tmp, false);
   });
 
   test("returns early (no throw) in dry-run when skills dir does not exist", async () => {
-    await expect(refreshSkills(tmp, true)).resolves.toBeUndefined();
+    await refreshSkills(tmp, true);
   });
 
   test("completes without error when skills dir exists but is empty", async () => {
     mkdirSync(join(tmp, "skills"), { recursive: true });
-    await expect(refreshSkills(tmp, true)).resolves.toBeUndefined();
+    await refreshSkills(tmp, true);
   });
 
   test("completes without error when skills dir has a non-git directory", async () => {
     const skillDir = join(tmp, "skills", "my-skill");
     mkdirSync(skillDir, { recursive: true });
     writeFileSync(join(skillDir, "SKILL.md"), "---\nname: my-skill\nglobal: true\n---\n");
-    await expect(refreshSkills(tmp, true)).resolves.toBeUndefined();
+    await refreshSkills(tmp, true);
   });
 });
 

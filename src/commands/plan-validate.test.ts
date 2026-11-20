@@ -192,6 +192,9 @@ function hasOutboundNetwork(args: string | undefined): boolean {
   return OUTBOUND_NETWORK_PATTERNS.some((p) => p.test(args));
 }
 
+const red = (s: string) => s;
+const yellow = (s: string) => s;
+
 function formatViolations(violations: Array<{
   step: number;
   tool: string;
@@ -199,9 +202,6 @@ function formatViolations(violations: Array<{
   severity: "error" | "warning";
   suggestion?: string;
 }>): string {
-  const red = (s: string) => s;
-  const yellow = (s: string) => s;
-
   return violations.map((v) => {
     const icon = v.severity === "error" ? red("✗") : yellow("⚠");
     const lines = [
