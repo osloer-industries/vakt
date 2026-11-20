@@ -30,10 +30,16 @@ function rootPrefix(root: string): string {
   return real.endsWith("/") ? real : `${real}/`;
 }
 
+/** Canonical absolute path for boundary checks (matches {@link rootPrefix} on macOS /var vs /private/var). */
+function canonicalPathForBoundaryCheck(logicalPath: string): string {
+  const resolved = resolve(logicalPath);
+  assertSafePath(resolved);
+  return existsSync(resolved) ? realpathSync.native(resolved) : resolved;
+}
+
 /** Prefix check on resolved paths without following symlinks on the candidate path. */
 function ensureUnderAllowedRootsLogical(logicalPath: string, allowedRoots: readonly string[]): string {
-  const abs = resolve(logicalPath);
-  assertSafePath(abs);
+  const abs = canonicalPathForBoundaryCheck(logicalPath);
   for (const root of allowedRoots) {
     const prefix = rootPrefix(root);
     const base = prefix.slice(0, -1);
