@@ -1,7 +1,7 @@
 import { join } from "node:path";
 import { chmodSync, existsSync, readFileSync } from "node:fs";
 import { AGENTS_DIR } from "./config";
-import { macosKeychainResponds } from "./macos-keychain-probe";
+import { MACOS_KEYCHAIN_AVAILABLE } from "./macos-keychain-probe";
 
 type Backend = "keychain" | "pass" | "env";
 const SERVICE = process.env["AGENTS_SERVICE"] ?? "vakt";
@@ -28,14 +28,10 @@ async function run(cmd: string, args: string[]): Promise<{ stdout: string; ok: b
   }
 }
 
-function keychainAccessible(): boolean {
-  return macosKeychainResponds();
-}
-
 function detectBackend(): Backend {
   const override = process.env["AGENTS_SECRETS_BACKEND"];
   if (override === "keychain" || override === "pass" || override === "env") return override;
-  if (process.platform === "darwin" && keychainAccessible()) return "keychain";
+  if (MACOS_KEYCHAIN_AVAILABLE) return "keychain";
   if (existsSync("/usr/bin/pass") || existsSync("/usr/local/bin/pass")) return "pass";
   return "env";
 }
