@@ -1,8 +1,10 @@
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
-import { join, basename } from "node:path";
+import { basename, dirname, join, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
 import { assertSafePath } from "./safe-input";
+import { AGENTS_DIR } from "./config";
 import { writeUtf8FileAtomic } from "./atomic-write";
+import { userPathRoots } from "./safe-input";
 import { requireExecutable, safeSpawnEnv } from "./safe-exec";
 
 export { assertSafePath } from "./safe-input";
@@ -345,11 +347,21 @@ export function pullSkill(skillDir: string): boolean {
   return result.status === 0;
 }
 
+function writeRootsForSkillFile(filePath: string): readonly string[] {
+  const parent = resolve(dirname(filePath));
+  return [parent, ...userPathRoots(AGENTS_DIR)];
+}
+
 export function setSkillGlobal(skillDir: string, value: boolean): void {
   assertSafePath(skillDir);
   const skillMd = join(skillDir, "SKILL.md");
+  const writeRoots = writeRootsForSkillFile(skillMd);
   if (!existsSync(skillMd)) {
-    writeUtf8FileAtomic(skillMd, `---\nname: ${basename(skillDir)}\nglobal: ${value}\n---\n`);
+    writeUtf8FileAtomic(
+      skillMd,
+      `---\nname: ${basename(skillDir)}\nglobal: ${value}\n---\n`,
+      writeRoots,
+    );
     return;
   }
   let content = readFileSync(skillMd, "utf-8");
@@ -361,8 +373,8 @@ export function setSkillGlobal(skillDir: string, value: boolean): void {
       // Inject after opening ---
       content = content.replace(/^---\r?\n/, `---\nglobal: ${value}\n`);
     }
-    writeUtf8FileAtomic(skillMd, content);
+    writeUtf8FileAtomic(skillMd, content, writeRoots);
   } else {
-    writeUtf8FileAtomic(skillMd, `---\nglobal: ${value}\n---\n\n` + content);
+    writeUtf8FileAtomic(skillMd, `---\nglobal: ${value}\n---\n\n` + content, writeRoots);
   }
 }

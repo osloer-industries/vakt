@@ -1,6 +1,7 @@
 import { existsSync, mkdirSync, readFileSync, realpathSync, statSync } from "node:fs";
-import { basename, dirname, join, resolve } from "node:path";
+import { basename, dirname, join, relative, resolve, sep } from "node:path";
 import { homedir } from "node:os";
+import { AGENTS_DIR } from "./config";
 
 /** Strip control characters for safe terminal/log output (log injection). */
 export function sanitizeForLog(value: string): string {
@@ -94,32 +95,64 @@ export function readBoundedUtf8File(userPath: string, allowedRoots: readonly str
   return readFileSync(resolveReadableFile(userPath, allowedRoots), "utf-8");
 }
 
+function assertSafePathSegment(segment: string): void {
+  if (!/^[\w.@+ -]+$/.test(segment) || segment === "." || segment === "..") {
+    throw new Error("Invalid path segment");
+  }
+}
+
 /**
- * Resolve a writable file path to a canonical absolute path under the real parent directory.
- * Used before atomic create/rename so temp and target paths cannot escape via symlinks or traversal.
+ * Resolve a writable file path under allowed roots, creating safe intermediate directories as needed.
  */
-export function resolveBoundedWritableFile(userPath: string): string {
+export function resolveWritableFileUnderRoots(userPath: string, allowedRoots: readonly string[]): string {
   if (!userPath || userPath.includes("\0")) {
     throw new Error("Invalid file path");
   }
   rejectParentPathSegments(userPath);
   const abs = resolve(userPath);
   assertSafePath(abs);
-  const name = basename(abs);
-  if (!name || name === "." || name === "..") {
+  const fileName = basename(abs);
+  if (!fileName || fileName === "." || fileName === "..") {
     throw new Error("Invalid file path");
   }
-  let dir = dirname(abs);
-  if (existsSync(dir)) {
-    dir = realpathSync.native(dir);
-  } else {
-    mkdirSync(dir, { recursive: true });
-    dir = resolve(dir);
+  assertSafePathSegment(fileName);
+
+  let probe = dirname(abs);
+  let boundedDir: string | undefined;
+  while (boundedDir === undefined) {
+    if (existsSync(probe)) {
+      boundedDir = ensureUnderAllowedRoots(realpathSync.native(probe), allowedRoots);
+      break;
+    }
+    const parent = dirname(probe);
+    if (parent === probe) {
+      throw new Error("Path is outside allowed directories");
+    }
+    probe = parent;
   }
-  assertSafePath(dir);
-  const target = join(dir, name);
+
+  const relParts = relative(boundedDir, dirname(abs)).split(sep).filter((part) => part.length > 0);
+  for (const part of relParts) {
+    assertSafePathSegment(part);
+  }
+
+  let cur = boundedDir;
+  for (const part of relParts) {
+    cur = join(cur, part);
+    assertSafePath(cur);
+    if (!existsSync(cur)) {
+      mkdirSync(cur);
+    }
+  }
+
+  const target = join(cur, fileName);
   assertSafePath(target);
   return target;
+}
+
+/** Resolve a writable file under default vakt path roots ({@link userPathRoots}). */
+export function resolveBoundedWritableFile(userPath: string): string {
+  return resolveWritableFileUnderRoots(userPath, userPathRoots(AGENTS_DIR));
 }
 
 /** Resolve a user-supplied path to an absolute, existing directory under allowed roots. */

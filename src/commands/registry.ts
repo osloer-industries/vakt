@@ -1,12 +1,15 @@
 import type { Command } from "commander";
 import { existsSync, mkdirSync } from "node:fs";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { spawnSync } from "node:child_process";
 import { loadAgentConfig } from "../lib/config";
 import { SkillsIndexSchema, type SkillsIndexEntry } from "../lib/schemas";
 import { verifyPackage } from "../lib/verify";
-import { AGENTS_DIR } from "../lib/config";
-import { assertSafeSkillName, resolveLocalDirectory, userPathRoots } from "../lib/safe-input";
+import {
+  assertSafeSkillName,
+  resolveWritableFileUnderRoots,
+  userPathRoots,
+} from "../lib/safe-input";
 import { requireExecutable, safeSpawnEnv } from "../lib/safe-exec";
 
 const bold   = (s: string) => `\x1b[1m${s}\x1b[0m`;
@@ -51,12 +54,11 @@ function searchSkills(skills: SkillsIndexEntry[], query: string): SkillsIndexEnt
   );
 }
 
-function installSkill(entry: SkillsIndexEntry, targetDir: string): boolean {
-  const roots = userPathRoots(AGENTS_DIR);
-  if (!existsSync(targetDir)) {
-    mkdirSync(targetDir, { recursive: true });
-  }
-  const boundedTarget = resolveLocalDirectory(targetDir, roots);
+function installSkill(entry: SkillsIndexEntry, agentsDir: string): boolean {
+  const roots = userPathRoots(agentsDir);
+  const boundedTarget = dirname(
+    resolveWritableFileUnderRoots(join(agentsDir, "skills", ".vakt-registry-marker"), roots),
+  );
   const safeName = assertSafeSkillName(entry.name);
   const dest = join(boundedTarget, safeName);
   if (existsSync(dest)) {
@@ -182,8 +184,7 @@ export function registerRegistry(program: Command): void {
       } else {
         warn(`supply-chain verification skipped: ${vResult.reason}`);
       }
-      const targetDir = join(agentsDir, "skills");
-      const installed = installSkill(entry, targetDir);
+      const installed = installSkill(entry, agentsDir);
       if (!installed) process.exit(1);
       info("Run 'vakt sync --skills-only' to link this skill to all providers");
     });
