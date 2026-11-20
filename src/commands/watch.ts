@@ -1,7 +1,7 @@
 import type { Command } from "commander";
 import { existsSync, mkdirSync, copyFileSync, appendFileSync } from "node:fs";
 import { join, dirname } from "node:path";
-import { spawnSync } from "node:child_process";
+import { requireExecutable, resolveExecutable } from "../lib/safe-exec";
 import { loadProviders } from "../lib/config";
 import { currentPlatformKey, platformStringPath } from "../lib/type-guards";
 
@@ -13,11 +13,9 @@ const ok     = (s: string) => console.log(`  ${green("✓")}  ${s}`);
 const warn   = (s: string) => console.log(`  ${yellow("⚠")}  ${s}`);
 const err    = (s: string) => console.log(`  ${red("✗")}  ${s}`);
 
-const WHICH = "/usr/bin/which";
-
 function detectWatcher(): "fswatch" | "inotifywait" | null {
-  if (spawnSync(WHICH, ["fswatch"], { encoding: "utf-8" }).status === 0) return "fswatch";
-  if (spawnSync(WHICH, ["inotifywait"], { encoding: "utf-8" }).status === 0) return "inotifywait";
+  if (resolveExecutable("fswatch")) return "fswatch";
+  if (resolveExecutable("inotifywait")) return "inotifywait";
   return null;
 }
 
@@ -170,7 +168,8 @@ export function registerWatch(program: Command): void {
           ? ["--one-event", "--event=Updated", "--event=Created", "--event=Removed", ...watchPaths]
           : ["-m", "-r", ...watchPaths, "--event", "MODIFY,CREATE,DELETE"];
 
-      const proc = Bun.spawn([watcher, ...watchArgs], { stdout: "pipe", stderr: "pipe" });
+      const watcherBin = requireExecutable(watcher);
+      const proc = Bun.spawn([watcherBin, ...watchArgs], { stdout: "pipe", stderr: "pipe" });
       const auditLog = join(agentsDir, "audit.log");
 
       await readWatchStream(proc.stdout.getReader(), watchPaths, auditLog, snapshotDir, opts);

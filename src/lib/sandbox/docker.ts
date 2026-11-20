@@ -3,7 +3,7 @@ import type {
 } from "../sandbox";
 import { assertDockerImageRef, assertDockerResourceId } from "../safe-input";
 import { buildDockerExecStartPath, rebuildDockerApiPath } from "../docker-api-path";
-import { bunFetch } from "../bun-fetch";
+import { bunFetch, DOCKER_ENGINE_API } from "../bun-fetch";
 import { parseDockerContainerList, parseDockerExecExit, parseDockerIdBody } from "../docker-json";
 
 interface DockerOpts {
@@ -47,14 +47,12 @@ export class DockerSandboxProvider implements SandboxProvider {
     this.defaultNetwork = opts.network ?? "none";
   }
 
-  private static readonly DOCKER_ENGINE = "http://127.0.0.1/v1.41";
-
   private async dockerFetch(path: string, init: RequestInit): Promise<Response> {
     const safePath = rebuildDockerApiPath(path);
     if (!/^\/[a-z0-9/?.=&_%-]+$/i.test(safePath)) {
       throw new Error("Refusing unsafe Docker API path");
     }
-    return bunFetch(DockerSandboxProvider.DOCKER_ENGINE + safePath, {
+    return bunFetch(DOCKER_ENGINE_API + safePath, {
       ...init,
       redirect: "error",
       unix: this.socket,

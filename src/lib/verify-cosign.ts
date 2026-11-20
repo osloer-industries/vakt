@@ -23,11 +23,10 @@ function cosignErrorOutput(e: unknown): CosignVerifyOutput {
 
 /** Run cosign verify; identifier is parsed into a rebuilt OCI ref before argv is built. */
 export function runCosignVerify(untrustedIdentifier: string): CosignVerifyOutput {
-  const ociRef = validatedOciReference(untrustedIdentifier);
-
+  const safeRef = validatedOciReference(untrustedIdentifier);
   const cosignBin = requireExecutable("cosign");
   try {
-    const stdout = execFileSync(cosignBin, ["verify", "--", ociRef], {
+    const stdout = execFileSync(cosignBin, ["verify", safeRef], {
       encoding: "utf-8",
       env: safeSpawnEnv(),
     });

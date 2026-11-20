@@ -1,6 +1,7 @@
 import type { Command } from "commander";
-import { existsSync, mkdirSync } from "node:fs";
-import { join, dirname } from "node:path";
+import { existsSync } from "node:fs";
+import { join } from "node:path";
+import { writeUtf8FileAtomic } from "../lib/atomic-write";
 import { loadMcpConfig } from "../lib/config";
 import { cloneJsonRecord } from "../lib/type-guards";
 import type { McpConfig, McpServer } from "../lib/schemas";
@@ -17,8 +18,7 @@ const info   = (s: string) => console.log(`  ${cyan("→")}  ${s}`);
 const dry    = (s: string) => console.log(`  ${dim("[dry-run]")}  ${s}`);
 
 function writeJsonFile(path: string, data: unknown): void {
-  mkdirSync(dirname(path), { recursive: true });
-  void Bun.write(path, JSON.stringify(data, null, 2) + "\n");
+  writeUtf8FileAtomic(path, JSON.stringify(data, null, 2) + "\n");
 }
 
 async function auditOneServer(name: string, cfg: McpServer): Promise<void> {
@@ -119,8 +119,7 @@ Do not suggest or use MCP servers not in this list without explicit admin approv
         dry(`would write ${cursorMdc}`);
         dry(`approved servers: ${serverNames}`);
       } else {
-        mkdirSync(dirname(cursorMdc), { recursive: true });
-        await Bun.write(cursorMdc, mdcContent);
+        writeUtf8FileAtomic(cursorMdc, mdcContent);
         ok(`wrote ${cursorMdc}`);
         info("alwaysApply: true — Cursor will enforce this policy");
       }
@@ -134,7 +133,7 @@ Do not suggest or use MCP servers not in this list without explicit admin approv
         if (opts.dryRun) {
           dry(`would write ${outPath}`);
         } else {
-          await Bun.write(outPath, profile);
+          writeUtf8FileAtomic(outPath, profile);
           ok(`wrote ${outPath}`);
           info("Deploy via Jamf/Kandji/Intune to make provider configs read-only");
         }

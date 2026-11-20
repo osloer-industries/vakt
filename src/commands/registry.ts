@@ -5,6 +5,8 @@ import { spawnSync } from "node:child_process";
 import { loadAgentConfig } from "../lib/config";
 import { SkillsIndexSchema, type SkillsIndexEntry } from "../lib/schemas";
 import { verifyPackage } from "../lib/verify";
+import { AGENTS_DIR } from "../lib/config";
+import { assertSafeSkillName, resolveLocalDirectory, userPathRoots } from "../lib/safe-input";
 import { requireExecutable, safeSpawnEnv } from "../lib/safe-exec";
 
 const bold   = (s: string) => `\x1b[1m${s}\x1b[0m`;
@@ -50,13 +52,19 @@ function searchSkills(skills: SkillsIndexEntry[], query: string): SkillsIndexEnt
 }
 
 function installSkill(entry: SkillsIndexEntry, targetDir: string): boolean {
-  const dest = join(targetDir, entry.name);
+  const roots = userPathRoots(AGENTS_DIR);
+  if (!existsSync(targetDir)) {
+    mkdirSync(targetDir, { recursive: true });
+  }
+  const boundedTarget = resolveLocalDirectory(targetDir, roots);
+  const safeName = assertSafeSkillName(entry.name);
+  const dest = join(boundedTarget, safeName);
   if (existsSync(dest)) {
     warn(`'${entry.name}' already installed at ${dest}`);
     info(`To update: rm -rf ${dest} && vakt registry skills install ${entry.name}`);
     return false;
   }
-  mkdirSync(targetDir, { recursive: true });
+  mkdirSync(boundedTarget, { recursive: true });
 
   if (entry.type === "git") {
     if (!entry.url.startsWith("https://")) {

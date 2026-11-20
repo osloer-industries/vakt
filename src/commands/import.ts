@@ -1,8 +1,9 @@
 // src/commands/import.ts
 import { join } from "node:path";
-import { existsSync, readdirSync, lstatSync, readFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, lstatSync, readFileSync } from "node:fs";
 import type { Command } from "commander";
 import { AGENTS_DIR, loadMcpConfig, loadProviders, resolveProviderConfigPath, expandHome } from "../lib/config";
+import { assertSafeSkillName, resolveLocalDirectory, userPathRoots } from "../lib/safe-input";
 import { RawProviderServerSchema, type McpServer } from "../lib/schemas";
 import { parse as parseToml } from "smol-toml";
 import {
@@ -103,11 +104,12 @@ function mergeServers(
 }
 
 async function linkSkillEntry(entry: string, skillsSource: string, skillsTarget: string): Promise<void> {
-  const src = join(skillsSource, entry);
-  const dest = join(skillsTarget, entry);
+  const safeEntry = assertSafeSkillName(entry);
+  const src = join(skillsSource, safeEntry);
+  const dest = join(skillsTarget, safeEntry);
   if (!lstatSync(src).isDirectory()) return;
   if (existsSync(dest)) return;
-  const { symlinkSync, mkdirSync } = await import("fs");
+  const { symlinkSync } = await import("fs");
   mkdirSync(skillsTarget, { recursive: true });
   symlinkSync(src, dest);
   console.log(`  ✓  linked skill: ${entry}`);
@@ -122,9 +124,15 @@ async function importSkillsFromProvider(
   if (!rawPath) return;
   const skillsSource = expandHome(rawPath);
   if (!existsSync(skillsSource) || skillsSource === skillsTarget) return;
+  const roots = userPathRoots(AGENTS_DIR);
   try {
-    const entries = readdirSync(skillsSource);
-    await Promise.all(entries.map((entry) => linkSkillEntry(entry, skillsSource, skillsTarget)));
+    if (!existsSync(skillsTarget)) {
+      mkdirSync(skillsTarget, { recursive: true });
+    }
+    const boundedSource = resolveLocalDirectory(skillsSource, roots);
+    const boundedTarget = resolveLocalDirectory(skillsTarget, roots);
+    const entries = readdirSync(boundedSource);
+    await Promise.all(entries.map((entry) => linkSkillEntry(entry, boundedSource, boundedTarget)));
   } catch {
     /* skip unreadable provider skill directory */
   }
