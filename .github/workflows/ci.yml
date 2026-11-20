@@ -54,8 +54,9 @@ jobs:
     uses: osloer-industries/.github/.github/workflows/mutation-changed.yml@a6ee91211fd9ba096ec141bacdb67985a82b6767 # v0.1.7
     with:
       package-manager: bun
+      bun-version-file: .bun-version
       full-npm-script: test:mutation
-      timeout-minutes: 20
+      timeout-minutes: 10
 
   agents-md-lint:
     uses: osloer-industries/.github/.github/workflows/agents-md-lint.yml@a6ee91211fd9ba096ec141bacdb67985a82b6767 # v0.1.7
