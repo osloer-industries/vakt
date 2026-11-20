@@ -1,6 +1,10 @@
+import { execFileSync } from "node:child_process";
 import { join } from "node:path";
 import { chmodSync, existsSync, readFileSync } from "node:fs";
 import { AGENTS_DIR } from "./config";
+
+const MACOS_SECURITY = "/usr/bin/security";
+const LIST_KEYCHAINS = ["list-keychains"] as const;
 
 type Backend = "keychain" | "pass" | "env";
 const SERVICE = process.env["AGENTS_SERVICE"] ?? "vakt";
@@ -28,7 +32,17 @@ async function run(cmd: string, args: string[]): Promise<{ stdout: string; ok: b
 }
 
 function keychainAccessible(): boolean {
-  return process.platform === "darwin" && existsSync("/usr/bin/security");
+  if (process.platform !== "darwin" || !existsSync(MACOS_SECURITY)) return false;
+  try {
+    const stdout = execFileSync(MACOS_SECURITY, LIST_KEYCHAINS, {
+      encoding: "utf-8",
+      timeout: 2000,
+      env: { PATH: "/usr/bin:/bin" },
+    });
+    return stdout.trim().length > 0;
+  } catch {
+    return false;
+  }
 }
 
 function detectBackend(): Backend {
