@@ -1,6 +1,6 @@
 import type { Command } from "commander";
 import { existsSync, mkdirSync, copyFileSync, appendFileSync } from "node:fs";
-import { join, dirname } from "node:path";
+import { join } from "node:path";
 import { spawnSync } from "node:child_process";
 import { loadProviders } from "../lib/config";
 
@@ -151,9 +151,5 @@ export function registerWatch(program: Command): void {
       const auditLog = join(agentsDir, "audit.log");
 
       await runWatchLoop(proc.stdout.getReader(), watchPaths, auditLog, snapshotDir, opts);
-
-      // Suppress unused variable warning
-      void ok;
-      void dirname;
     });
 }
