@@ -77,11 +77,11 @@ export function registerAudit(program: Command): void {
     .option("--server <name>", "filter by server name")
     .option("--last <window>", "time window: 1h, 24h, 7d, 4w", "24h")
     .option("--limit <n>",    "max rows to show", "50")
-    .action((opts) => {
+    .action((opts: { server?: string; last?: string; limit?: string }) => {
       const store = new AuditStore();
       store.init();
       const rows = store.query({
-        serverName: opts.server,
+        ...(opts.server === undefined ? {} : { serverName: opts.server }),
         since: Date.now() - parseDuration(String(opts.last)),
         limit: Number(opts.limit),
       });
@@ -130,11 +130,14 @@ export function registerAudit(program: Command): void {
     .description("Export audit log as JSON (pipe to SIEM or OTLP collector)")
     .option("--since <iso-date>", "only events after this date")
     .option("--limit <n>", "max rows", "10000")
-    .action((opts) => {
+    .action((opts: { since?: string; limit?: string }) => {
       const store = new AuditStore();
       store.init();
-      const since = opts.since ? new Date(String(opts.since)).getTime() : 0;
-      const rows = store.query({ since, limit: Number(opts.limit) });
+      const since = opts.since ? new Date(opts.since).getTime() : 0;
+      const rows = store.query({
+        ...(since > 0 ? { since } : {}),
+        limit: Number(opts.limit),
+      });
       console.log(JSON.stringify(rows, null, 2));
     });
 }

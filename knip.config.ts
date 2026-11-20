@@ -10,6 +10,7 @@ const config: KnipConfig = {
     "bats",   // system test runner, not a package
     "eslint", // called in scripts, provided by devDependency eslint
     "knip",   // called in scripts, provided by devDependency knip
+    "oxlint", // called in scripts, provided by devDependency oxlint
   ],
   // GitHub Actions plugin fails to parse multiline YAML strings in release.yml
   "github-actions": false,

@@ -180,19 +180,20 @@ function checkRegistryPolicy(policy: Policy | null, mcpConfig: McpConfig): void 
 
 function applyProxyWrap(resolved: ResolvedConfig, withProxy: boolean): ResolvedConfig {
   if (!withProxy) return resolved;
-  return Object.fromEntries(
-    Object.entries(resolved).map(([name, server]) => {
-      if (isResolvedStdioServer(server)) {
-        const wrapped: ResolvedServer = {
-          command: "vakt",
-          args: ["proxy", name],
-          ...(server.env ? { env: server.env } : {}),
-        };
-        return [name, wrapped];
-      }
-      return [name, server];
-    }),
-  );
+  const wrapped: ResolvedConfig = {};
+  for (const [name, server] of Object.entries(resolved)) {
+    if (isResolvedStdioServer(server)) {
+      const proxied: ResolvedServer = {
+        command: "vakt",
+        args: ["proxy", name],
+        ...(server.env ? { env: server.env } : {}),
+      };
+      wrapped[name] = proxied;
+      continue;
+    }
+    wrapped[name] = server;
+  }
+  return wrapped;
 }
 
 async function syncMcpServers(
@@ -675,7 +676,17 @@ export function registerSync(program: Command): void {
     .option("--ci", "Non-interactive: gate errors block sync (exit 1), warnings pass")
     .option("--force", "Skip pre-sync safety gate entirely")
     .option("--skip-auto-pull", "Skip automatic remote config pull (when autoSync is enabled)")
-    .action(async (opts) => {
+    .action(async (opts: {
+      dryRun?: boolean;
+      mcpOnly?: boolean;
+      skillsOnly?: boolean;
+      withProxy?: boolean;
+      all?: boolean;
+      updateSkills?: boolean;
+      ci?: boolean;
+      force?: boolean;
+      skipAutoPull?: boolean;
+    }) => {
       await runSyncCommand(parseSyncOpts(opts));
     });
 }

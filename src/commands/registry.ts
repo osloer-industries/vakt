@@ -26,7 +26,7 @@ async function fetchIndex(indexUrl: string, token?: string): Promise<SkillsIndex
       console.error(`Error fetching skills index: HTTP ${resp.status}`);
       return null;
     }
-    const raw = await resp.json();
+    const raw: unknown = await resp.json();
     const parsed = SkillsIndexSchema.safeParse(raw);
     if (!parsed.success) {
       console.error(`Invalid skills index format: ${parsed.error.issues[0]?.message}`);
