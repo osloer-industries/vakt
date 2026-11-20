@@ -91,7 +91,6 @@ function validatePlan(
     }
     
     const result = engine.checkTool(serverName, mention.tool);
-    
     if (result.result === "deny") {
       violations.push({
         step: mention.step,
