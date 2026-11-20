@@ -111,14 +111,15 @@ async function passList(): Promise<string[]> {
 function readEnvFile(): Record<string, string> {
   if (!existsSync(ENV_FILE)) return {};
   const lines = readFileSync(ENV_FILE, "utf-8").split("\n");
-  return Object.fromEntries(
-    lines
-      .filter((l) => l.includes("="))
-      .map((l) => {
-        const [k, ...rest] = l.split("=");
-        return [k!.trim(), Buffer.from(rest.join("=").trim(), "base64").toString("utf-8")];
-      })
-  );
+  const pairs: Array<[string, string]> = [];
+  for (const line of lines) {
+    if (!line.includes("=")) continue;
+    const [k, ...rest] = line.split("=");
+    const key = k?.trim();
+    if (key === undefined || key.length === 0) continue;
+    pairs.push([key, Buffer.from(rest.join("=").trim(), "base64").toString("utf-8")]);
+  }
+  return Object.fromEntries(pairs);
 }
 
 function writeEnvFile(data: Record<string, string>): void {
@@ -191,9 +192,10 @@ async function opGet(spec: string): Promise<string | null> {
   const parts = spec.split("/");
   if (parts.length < 3) return null;
   const [vault, item, ...fieldParts] = parts;
+  if (vault === undefined || item === undefined) return null;
   const field = fieldParts.join("/");
   const { stdout, ok } = await run("op", [
-    "item", "get", item!, "--vault", vault!, "--fields", field!,
+    "item", "get", item, "--vault", vault, "--fields", field,
   ]);
   return ok ? stdout : null;
 }
@@ -219,7 +221,9 @@ export async function resolveSecretRefs(
 ): Promise<{ resolved: string; missing: string[] }> {
   const missing: string[] = [];
   // Match secret:KEY (plain) or secret:vault|op|azure:rest/path (namespaced)
-  const refs = [...value.matchAll(/secret:((?:vault|op|azure):[\w\/\-\.]+|\w+)/g)].map((m) => m[1]!);
+  const refs = [...value.matchAll(/secret:((?:vault|op|azure):[\w\/\-\.]+|\w+)/g)]
+    .map((m) => m[1])
+    .filter((ref): ref is string => ref !== undefined);
   let resolved = value;
   for (const ref of refs) {
     let val: string | null = null;

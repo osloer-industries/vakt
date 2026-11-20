@@ -5,6 +5,8 @@ import { AuditStore } from "../lib/audit";
 import { initOtel, shutdownOtel } from "../lib/otel";
 import { createProxy } from "../daemon/proxy";
 import { randomUUID } from "node:crypto";
+import { requireStdioServer } from "../lib/stdio-server";
+import { envRecord } from "../lib/type-guards";
 
 export function registerProxy(program: Command): void {
   program
@@ -14,12 +16,7 @@ export function registerProxy(program: Command): void {
       const mcpConfig   = loadMcpConfig();
       const agentConfig = loadAgentConfig();
       const policy      = loadPolicy();
-      const server      = mcpConfig[serverName] as any;
-
-      if (!server?.command) {
-        process.stderr.write(`vakt: unknown server '${serverName}'\n`);
-        process.exit(1);
-      }
+      const server      = requireStdioServer(serverName, mcpConfig[serverName]);
 
       const store = new AuditStore();
       store.init();
@@ -32,21 +29,27 @@ export function registerProxy(program: Command): void {
       });
 
       const proc = Bun.spawn(
-        [server.command as string, ...(server.args as string[] ?? [])],
+        [server.command, ...(server.args ?? [])],
         {
           stdin: "pipe", stdout: "pipe", stderr: "pipe",
-          env: { ...process.env, ...(server.env as Record<string, string>) },
+          env: { ...envRecord(), ...server.env },
         }
       );
+
+      const procStdin = proc.stdin;
+      if (procStdin === null || procStdin === undefined) {
+        process.stderr.write(`vakt: failed to open stdin for server '${serverName}'\n`);
+        process.exit(1);
+      }
 
       // Agent stdin → policy check → server stdin
       // Close server stdin on EOF so the server exits cleanly and flushes its stdout
       process.stdin.on("data", (data: Buffer) => {
         const { forward, denied } = proxy.interceptRequest(data);
         denied.forEach(d => process.stdout.write(d));
-        if (forward.length > 0) proc.stdin!.write(forward);
+        if (forward.length > 0) procStdin.write(forward);
       });
-      process.stdin.on("end", () => proc.stdin!.end());
+      process.stdin.on("end", () => procStdin.end());
 
       // Server stdout → audit recording → agent stdout
       // Awaited before exit so interceptResponse runs for every response before the process ends

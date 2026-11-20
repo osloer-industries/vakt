@@ -250,7 +250,7 @@ describe("resolveAll", () => {
 describe("formatForProvider", () => {
   it("maps stdio server command and args", () => {
     const result = formatForProvider(
-      { myserver: { command: "npx", args: ["-y", "mcp-test"], global: false } },
+      { myserver: { command: "npx", args: ["-y", "mcp-test"] } },
       makeProvider(),
     );
     expect(result["myserver"]?.["command"]).toBe("npx");
@@ -267,7 +267,7 @@ describe("formatForProvider", () => {
 
   it("merges command+args into one array when commandProperty === argsProperty", () => {
     const result = formatForProvider(
-      { s: { command: "npx", args: ["-y", "pkg"], global: false } },
+      { s: { command: "npx", args: ["-y", "pkg"] } },
       makeProvider({ stdioPropertyMapping: { commandProperty: "cmd", argsProperty: "cmd" } }),
     );
     expect(result["s"]?.["cmd"]).toEqual(["npx", "-y", "pkg"]);
@@ -275,7 +275,7 @@ describe("formatForProvider", () => {
 
   it("includes typeProperty when configured", () => {
     const result = formatForProvider(
-      { s: { command: "npx", global: false } },
+      { s: { command: "npx" } },
       makeProvider({
         stdioPropertyMapping: {
           commandProperty: "command",
@@ -290,7 +290,7 @@ describe("formatForProvider", () => {
 
   it("includes env when envProperty is configured", () => {
     const result = formatForProvider(
-      { s: { command: "npx", env: { TOKEN: "abc" }, global: false } },
+      { s: { command: "npx", env: { TOKEN: "abc" } } },
       makeProvider(),
     );
     expect(result["s"]?.["env"]).toEqual({ TOKEN: "abc" });

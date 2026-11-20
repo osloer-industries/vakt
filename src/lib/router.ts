@@ -1,4 +1,5 @@
 import type { ModelRouter } from "./schemas";
+import { isRecord } from "./type-guards";
 
 export interface RoutingSignals {
   promptTokens: number;
@@ -43,8 +44,8 @@ export function detectMath(messages: Array<{ role: string; content: string }>): 
 }
 
 export function extractToolCount(body: unknown): number {
-  if (typeof body !== "object" || body === null) return 0;
-  const tools = (body as Record<string, unknown>).tools;
+  if (!isRecord(body)) return 0;
+  const tools = body.tools;
   if (Array.isArray(tools)) return tools.length;
   return 0;
 }
@@ -135,17 +136,11 @@ export function buildSignals(body: unknown): RoutingSignals {
 }
 
 function extractMessages(body: unknown): Array<{ role: string; content: string }> {
-  if (typeof body !== "object" || body === null) return [];
-  const messages = (body as Record<string, unknown>).messages;
-  if (Array.isArray(messages)) {
-    return messages.filter((m): m is { role: string; content: string } => 
-      typeof m === "object" && 
-      m !== null &&
-      "role" in m && 
-      "content" in m &&
-      typeof (m as Record<string, unknown>).role === "string" &&
-      typeof (m as Record<string, unknown>).content === "string"
-    );
-  }
-  return [];
+  if (!isRecord(body)) return [];
+  const messages = body.messages;
+  if (!Array.isArray(messages)) return [];
+  return messages.filter((m): m is { role: string; content: string } => {
+    if (!isRecord(m)) return false;
+    return typeof m.role === "string" && typeof m.content === "string";
+  });
 }

@@ -157,7 +157,8 @@ export function validateDockerApiPath(path: string): void {
   const pathname = path.split("?")[0] ?? path;
   const segments = pathname.split("/").filter(Boolean);
   for (let i = 0; i < segments.length; i++) {
-    const seg = segments[i]!;
+    const seg = segments[i];
+    if (seg === undefined) continue;
     const parent = segments[i - 1];
     if (parent === "containers" && !DOCKER_PATH_LITERALS.has(seg)) {
       assertDockerResourceId(seg);

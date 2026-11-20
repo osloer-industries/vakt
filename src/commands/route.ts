@@ -1,5 +1,6 @@
 import type { Command } from "commander";
 import { loadAgentConfig } from "../lib/config";
+import type { ModelRouter } from "../lib/schemas";
 import { buildSignals, selectBackend } from "../lib/router";
 import { AuditStore } from "../lib/audit";
 import { resolveSecretRefs } from "../lib/secrets";
@@ -150,7 +151,7 @@ export function registerRoute(program: Command): void {
 }
 
 async function testRouting(
-  config: { modelRouter?: { port: number; backends?: Record<string, { url: string }>; rules?: any[] } },
+  config: { modelRouter?: ModelRouter },
   opts: { tokens?: string; tools?: string; hasCode?: boolean; hasMath?: boolean }
 ): Promise<void> {
   console.log(bold("Testing routing logic...\n"));

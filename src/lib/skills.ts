@@ -27,8 +27,14 @@ function parseFrontmatter(content: string): Record<string, string> {
   const result: Record<string, string> = {};
   for (let i = 1; i < lines.length; i++) {
     if (lines[i] === "---") break;
-    const kv = (/^(\w[\w-]*):\s*(.+)/).exec(lines[i]!);
-    if (kv) result[kv[1]!] = kv[2]!.trim();
+    const line = lines[i];
+    if (line === undefined) break;
+    const kv = (/^(\w[\w-]*):\s*(.+)/).exec(line);
+    if (kv) {
+      const key = kv[1];
+      const value = kv[2];
+      if (key !== undefined && value !== undefined) result[key] = value.trim();
+    }
   }
   return result;
 }
@@ -75,7 +81,9 @@ function parseBlockArray(lines: string[], startIndex: number): { items: string[]
   const items: string[] = [];
   let i = startIndex;
   while (i < lines.length) {
-    const itemLine = lines[i]!.trimStart();
+    const rawLine = lines[i];
+    if (rawLine === undefined) break;
+    const itemLine = rawLine.trimStart();
     if (!itemLine.startsWith("- ")) break;
     items.push(itemLine.slice(2).trim());
     i++;
@@ -98,6 +106,26 @@ function applyScalarField(meta: SkillMeta, key: string, trimmed: string): void {
  * including the `allowed-tools` array field (inline or block style).
  * Uses only string operations — no regex — to guarantee linear runtime.
  */
+function advanceFrontmatterLine(meta: SkillMeta, lines: string[], index: number): number {
+  const line = lines[index];
+  if (line === undefined) return lines.length;
+  const colonPos = line.indexOf(":");
+  if (colonPos <= 0) return index + 1;
+
+  const key = line.slice(0, colonPos);
+  if (!isValidKey(key)) return index + 1;
+
+  const rest = line.slice(colonPos + 1).trimStart();
+  if (rest === "") {
+    const { items, nextIndex } = parseBlockArray(lines, index + 1);
+    if (key === "allowed-tools" && items.length) meta.allowedTools = items;
+    return nextIndex;
+  }
+
+  applyScalarField(meta, key, rest.trim());
+  return index + 1;
+}
+
 export function parseSkillFrontmatter(content: string): SkillMeta {
   const meta: SkillMeta = {};
   // Extract frontmatter block using indexOf (avoids multi-line regex ReDoS)
@@ -110,23 +138,7 @@ export function parseSkillFrontmatter(content: string): SkillMeta {
   const lines = block.split("\n");
   let i = 0;
   while (i < lines.length) {
-    const line = lines[i]!;
-    const colonPos = line.indexOf(":");
-    if (colonPos <= 0) { i++; continue; }
-
-    const key = line.slice(0, colonPos);
-    if (!isValidKey(key)) { i++; continue; }
-
-    const rest = line.slice(colonPos + 1).trimStart();
-    if (rest === "") {
-      const { items, nextIndex } = parseBlockArray(lines, i + 1);
-      if (key === "allowed-tools" && items.length) meta.allowedTools = items;
-      i = nextIndex;
-      continue;
-    }
-
-    applyScalarField(meta, key, rest.trim());
-    i++;
+    i = advanceFrontmatterLine(meta, lines, i);
   }
   return meta;
 }
@@ -202,7 +214,9 @@ export function scanSkillHazards(skillDir: string): SkillHazard[] {
     if (!existsSync(filePath)) return;
     const lines = readFileSync(filePath, "utf-8").split("\n");
     for (let i = 0; i < lines.length; i++) {
-      const label = findLineHazard(lines[i]!);
+      const line = lines[i];
+      if (line === undefined) continue;
+      const label = findLineHazard(line);
       if (label) hazards.push({ file: basename(filePath), pattern: label, line: i + 1 });
     }
   }

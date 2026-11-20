@@ -3,6 +3,7 @@ import { existsSync, mkdirSync, copyFileSync, appendFileSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { spawnSync } from "node:child_process";
 import { loadProviders } from "../lib/config";
+import { currentPlatformKey, platformStringPath } from "../lib/type-guards";
 
 const bold   = (s: string) => `\x1b[1m${s}\x1b[0m`;
 const green  = (s: string) => `\x1b[32m${s}\x1b[0m`;
@@ -28,12 +29,11 @@ function resolveProviderPaths(home: string): string[] {
     return [];
   }
 
-  const plat = process.platform as "darwin" | "linux" | "win32";
+  const plat = currentPlatformKey();
   const paths: string[] = [];
 
   for (const provider of Object.values(providers)) {
-    const cp = provider.configPath;
-    const rawPath = typeof cp === "string" ? cp : (cp as Record<string, string>)[plat] ?? "";
+    const rawPath = platformStringPath(provider.configPath, plat);
     if (!rawPath) continue;
     const expanded = rawPath.replace(/^~/, home).replace(/\$HOME/g, home);
     if (existsSync(expanded)) paths.push(expanded);

@@ -17,8 +17,8 @@ export async function initOtel(endpoint?: string): Promise<void> {
     const { OTLPTraceExporter } = await import("@opentelemetry/exporter-trace-otlp-grpc");
 
     const sdk = new NodeSDK({
-      serviceName:   "vakt",
-      traceExporter: new OTLPTraceExporter({ url: endpoint }) as any,
+      serviceName: "vakt",
+      traceExporter: new OTLPTraceExporter({ url: endpoint }),
     });
     sdk.start();
     sdkShutdown = () => sdk.shutdown();

@@ -2,14 +2,15 @@ import { writeFileSync, unlinkSync, existsSync } from "node:fs";
 import { loadMcpConfig, loadAgentConfig } from "../lib/config";
 import { AuditStore } from "../lib/audit";
 import { ProcessManager } from "./process-manager";
-import { SOCKET_PATH, PID_PATH, type DaemonCmd, type DaemonResponse } from "./ipc";
+import { SOCKET_PATH, PID_PATH, parseDaemonCmd, type DaemonCmd, type DaemonResponse } from "./ipc";
+import { parseJsonUnknown } from "../lib/type-guards";
 
 export async function runDaemon(): Promise<void> {
   const mcpConfig   = loadMcpConfig();
   const agentConfig = loadAgentConfig();
   const store       = new AuditStore();
   store.init();
-  const pm = new ProcessManager(mcpConfig as any, agentConfig);
+  const pm = new ProcessManager(mcpConfig, agentConfig);
 
   writeFileSync(PID_PATH, process.pid.toString());
   const cleanup = () => {
@@ -27,7 +28,7 @@ export async function runDaemon(): Promise<void> {
       async data(socket, data) {
         let response: DaemonResponse;
         try {
-          const cmd = JSON.parse(data.toString()) as DaemonCmd;
+          const cmd = parseDaemonCmd(parseJsonUnknown(data.toString()));
           response = await handle(cmd, pm, store);
         } catch (e) {
           response = { ok: false, error: String(e) };

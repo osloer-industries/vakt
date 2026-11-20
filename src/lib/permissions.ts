@@ -3,6 +3,7 @@ import { dirname, join } from "node:path";
 import { randomBytes } from "node:crypto";
 import { expandHome } from "./config";
 import { KNOWN_TOOLS, type ToolPermission } from "./schemas";
+import { isRecord, parseJsonUnknown } from "./type-guards";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -109,7 +110,8 @@ export class ClaudeSettingsAdapter implements PermissionsAdapter {
     let settings: ClaudeSettings = {};
     if (existsSync(resolvedPath)) {
       try {
-        settings = JSON.parse(readFileSync(resolvedPath, "utf-8")) as ClaudeSettings;
+        const raw = parseJsonUnknown(readFileSync(resolvedPath, "utf-8"));
+        settings = isRecord(raw) ? { ...raw } : {};
       } catch {
         // Treat unparseable file as empty — safer than aborting the sync
         warnings.push(`could not parse ${resolvedPath} — treating as empty`);
@@ -141,7 +143,7 @@ export class ClaudeSettingsAdapter implements PermissionsAdapter {
       [VAKT_MARKER_KEY]: { allow: allowStrings, deny: denyStrings },
     };
     if (Object.keys(perms).length > 0) {
-      updated.permissions = perms as ClaudeSettings["permissions"];
+      updated.permissions = { ...perms };
     } else {
       delete updated.permissions;
     }

@@ -2,6 +2,7 @@ import type { Command } from "commander";
 import { existsSync, mkdirSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { loadMcpConfig } from "../lib/config";
+import { cloneJsonRecord } from "../lib/type-guards";
 import type { McpConfig, McpServer } from "../lib/schemas";
 import { verifyPackage } from "../lib/verify";
 
@@ -77,7 +78,7 @@ export function registerLockdown(program: Command): void {
       // Build Claude-compatible server entries (strip _source metadata)
       const servers: Record<string, unknown> = {};
       for (const [name, cfg] of Object.entries(mcpConfig)) {
-        const entry = { ...cfg } as Record<string, unknown>;
+        const entry = cloneJsonRecord(cfg);
         delete entry["_source"];
         servers[name] = entry;
       }

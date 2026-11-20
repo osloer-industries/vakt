@@ -3,7 +3,7 @@ import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { loadMcpConfig, loadAgentConfig, AGENTS_DIR } from "../lib/config";
 import { getRuntimeForServer } from "../lib/runtime";
-import { RUNTIME_BACKENDS } from "../lib/schemas";
+import { RuntimeBackendSchema } from "../lib/schemas";
 
 export function registerRuntime(program: Command): void {
   const runtime = program.command("runtime").description("Manage server runtime backends (local or cloud)");
@@ -23,16 +23,17 @@ export function registerRuntime(program: Command): void {
 
   runtime
     .command("set <server> <backend>")
-    .description(`Set runtime for a server: ${RUNTIME_BACKENDS.join(" | ")}`)
+    .description("Set runtime for a server")
     .action((server: string, backend: string) => {
-      if (!(RUNTIME_BACKENDS as readonly string[]).includes(backend)) {
-        console.error(`Backend must be one of: ${RUNTIME_BACKENDS.join(", ")}`);
+      const parsedBackend = RuntimeBackendSchema.safeParse(backend);
+      if (!parsedBackend.success) {
+        console.error(`Backend must be one of: ${RuntimeBackendSchema.options.join(", ")}`);
         process.exit(1);
       }
       const ac = loadAgentConfig();
-      if (!ac.runtime) ac.runtime = { default: "local" };
-      if (!ac.runtime!.servers) ac.runtime!.servers = {};
-      (ac.runtime!.servers as Record<string, string>)[server] = backend;
+      const runtimeCfg = ac.runtime ?? { default: "local" as const };
+      const servers = { ...runtimeCfg.servers, [server]: parsedBackend.data };
+      ac.runtime = { ...runtimeCfg, servers };
       writeFileSync(join(AGENTS_DIR, "config.json"), JSON.stringify(ac, null, 2) + "\n");
       console.log(`✓ ${server} → ${backend}`);
     });

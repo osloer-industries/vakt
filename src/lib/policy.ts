@@ -18,7 +18,7 @@ export function loadMergedPolicy(agentsDir: string): Policy | null {
 
   if (existsSync(remotePath)) {
     try {
-      const raw = JSON.parse(readFileSync(remotePath, "utf-8")) as unknown;
+      const raw: unknown = JSON.parse(readFileSync(remotePath, "utf-8"));
       const result = PolicySchema.safeParse(raw);
       if (result.success) remote = result.data;
     } catch { /* ignore */ }
@@ -26,7 +26,7 @@ export function loadMergedPolicy(agentsDir: string): Policy | null {
 
   if (existsSync(localPath)) {
     try {
-      const raw = JSON.parse(readFileSync(localPath, "utf-8")) as unknown;
+      const raw: unknown = JSON.parse(readFileSync(localPath, "utf-8"));
       const result = PolicySchema.safeParse(raw);
       if (result.success) local = result.data;
     } catch { /* ignore */ }
@@ -37,8 +37,7 @@ export function loadMergedPolicy(agentsDir: string): Policy | null {
 }
 
 export function mergePolicies(remote: Policy, local: Policy): Policy {
-  const remoteMeta = remote._meta as { lockedKeys?: string[] } | undefined;
-  const lockedKeys = new Set(remoteMeta?.lockedKeys ?? []);
+  const lockedKeys = new Set(remote._meta?.lockedKeys ?? []);
 
   const merged: Record<string, unknown> = { ...remote };
 
@@ -48,8 +47,8 @@ export function mergePolicies(remote: Policy, local: Policy): Policy {
 
     if (key === "servers") {
       merged["servers"] = mergeServers(
-        (remote.servers ?? {}) as Record<string, PolicyServerRules>,
-        (local.servers ?? {}) as Record<string, PolicyServerRules>
+        remote.servers ?? {},
+        local.servers ?? {},
       );
     } else {
       merged[key] = value;
@@ -71,7 +70,11 @@ function mergeServers(
       merged[name] = localCfg;
       continue;
     }
-    const remoteCfg = merged[name]!;
+    const remoteCfg = merged[name];
+    if (remoteCfg === undefined) {
+      merged[name] = localCfg;
+      continue;
+    }
     const rTools = remoteCfg.tools ?? {};
     const lTools = localCfg.tools ?? {};
 

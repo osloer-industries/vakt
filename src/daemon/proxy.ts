@@ -2,9 +2,8 @@ import { randomUUID } from "node:crypto";
 import { PolicyEngine } from "../lib/policy";
 import { AuditStore } from "../lib/audit";
 import { recordToolCallSpan } from "../lib/otel";
-import type { Policy } from "../lib/schemas";
-
-interface JsonRpcFrame { jsonrpc: "2.0"; id?: unknown; method?: string; params?: Record<string, unknown>; }
+import { JsonRpcFrameSchema, type JsonRpcFrame, type Policy } from "../lib/schemas";
+import { isRecord, parseJsonUnknown, readString } from "../lib/type-guards";
 
 interface DenyData {
   rule: string;
@@ -43,13 +42,24 @@ function denyFrame(id: unknown, toolName: string, data: DenyData): string {
   }) + "\n";
 }
 
+function parseFrameLine(line: string): JsonRpcFrame | null {
+  try {
+    return JsonRpcFrameSchema.parse(parseJsonUnknown(line));
+  } catch {
+    return null;
+  }
+}
+
 function parseFrames(data: Buffer | Uint8Array): JsonRpcFrame[] {
   return Buffer.from(data).toString("utf-8")
     .split("\n")
     .filter(l => l.trim())
     // MCP uses newline-delimited JSON-RPC 2.0 over stdio; malformed lines are silently dropped
     // per spec: https://spec.modelcontextprotocol.io/specification/basic/transports/#stdio
-    .flatMap(l => { try { return [JSON.parse(l) as JsonRpcFrame]; } catch { return []; } }); // NOSONAR
+    .flatMap(l => {
+      const frame = parseFrameLine(l);
+      return frame ? [frame] : [];
+    });
 }
 
 export interface ProxyOptions {
@@ -58,6 +68,26 @@ export interface ProxyOptions {
   store:      AuditStore;
   sessionId?: string;
   provider?:  string;
+}
+
+function recordDeniedToolCall(
+  opts: ProxyOptions,
+  sessionId: string,
+  toolName: string,
+  startedAt: number,
+  policyRule: string | undefined,
+): void {
+  const endedAt = Date.now();
+  opts.store.recordToolCall({
+    sessionId, serverName: opts.serverName, toolName, runtime: "local",
+    provider: opts.provider ?? "unknown", policyResult: "deny",
+    startedAt, endedAt, responseOk: false, policyRule,
+  });
+  recordToolCallSpan({
+    serverName: opts.serverName, toolName, runtime: "local",
+    policyResult: "deny", provider: opts.provider ?? "unknown",
+    sessionId, startedAt, endedAt, ok: false, policyRule,
+  });
 }
 
 export function createProxy(opts: ProxyOptions) {
@@ -75,33 +105,26 @@ export function createProxy(opts: ProxyOptions) {
 
     for (const frame of frames) {
       const raw = JSON.stringify(frame) + "\n";
-      if (frame.method === "tools/call") {
-        const toolName  = (frame.params?.["name"] ?? "") as string;
-        const startedAt = Date.now();
-        const checkResult = engine.checkTool(opts.serverName, toolName);
-
-        if (checkResult.result === "deny") {
-          const denyData = buildDenyData(checkResult.matchedRule ?? "unknown");
-          denied.push(denyFrame(frame.id, toolName, denyData));
-          const endedAt = Date.now();
-          opts.store.recordToolCall({
-            sessionId, serverName: opts.serverName, toolName, runtime: "local",
-            provider: opts.provider ?? "unknown", policyResult: "deny",
-            startedAt, endedAt, responseOk: false, policyRule: checkResult.matchedRule,
-          });
-          recordToolCallSpan({
-            serverName: opts.serverName, toolName, runtime: "local",
-            policyResult: "deny", provider: opts.provider ?? "unknown",
-            sessionId, startedAt, endedAt, ok: false, policyRule: checkResult.matchedRule,
-          });
-        } else {
-          forward.push(raw);
-          if (frame.id !== undefined && frame.id !== null) {
-            pending.set(frame.id, { toolName, startedAt });
-          }
-        }
-      } else {
+      if (frame.method !== "tools/call") {
         forward.push(raw);
+        continue;
+      }
+
+      const params = isRecord(frame.params) ? frame.params : {};
+      const toolName = readString(params, "name") ?? "";
+      const startedAt = Date.now();
+      const checkResult = engine.checkTool(opts.serverName, toolName);
+
+      if (checkResult.result === "deny") {
+        const denyData = buildDenyData(checkResult.matchedRule ?? "unknown");
+        denied.push(denyFrame(frame.id, toolName, denyData));
+        recordDeniedToolCall(opts, sessionId, toolName, startedAt, checkResult.matchedRule);
+        continue;
+      }
+
+      forward.push(raw);
+      if (frame.id !== undefined && frame.id !== null) {
+        pending.set(frame.id, { toolName, startedAt });
       }
     }
 
@@ -116,7 +139,9 @@ export function createProxy(opts: ProxyOptions) {
     const frames = parseFrames(data);
     for (const frame of frames) {
       if (frame.id !== undefined && frame.id !== null && pending.has(frame.id)) {
-        const { toolName, startedAt } = pending.get(frame.id)!;
+        const pendingCall = pending.get(frame.id);
+        if (pendingCall === undefined) continue;
+        const { toolName, startedAt } = pendingCall;
         pending.delete(frame.id);
         recordAllowed(toolName, startedAt);
       }

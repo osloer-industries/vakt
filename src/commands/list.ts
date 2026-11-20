@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { existsSync, readdirSync } from "node:fs";
 import type { Command } from "commander";
 import { AGENTS_DIR, loadMcpConfig } from "../lib/config";
+import { isStdioServer } from "../lib/stdio-server";
 import { secretsList, getBackend } from "../lib/secrets";
 import { isSkillGlobal, readSkillMeta } from "../lib/skills";
 
@@ -16,6 +17,12 @@ export function globalTag(scope: "global" | "local"): string {
   return scope === "global" ? green("[global]") : yellow("[local]");
 }
 
+function serverDescription(server: import("../lib/schemas").McpServer): string {
+  if ("transport" in server && server.transport === "http") return cyan(server.url);
+  if (isStdioServer(server)) return dim(`${server.command} ${(server.args ?? []).join(" ")}`);
+  return dim("unknown");
+}
+
 function printServers(config: import("../lib/schemas").McpConfig): void {
   console.log(`\n${bold("── MCP Servers ──────────────────────────────────────")}`);
   const entries = Object.entries(config);
@@ -23,9 +30,7 @@ function printServers(config: import("../lib/schemas").McpConfig): void {
     console.log(`  ${dim("No servers configured.")}`);
   } else {
     for (const [name, server] of entries) {
-      const desc = "transport" in server && server.transport === "http"
-        ? cyan(server.url)
-        : dim(`${(server as import("../lib/schemas").StdioServer).command} ${((server as import("../lib/schemas").StdioServer).args ?? []).join(" ")}`);
+      const desc = serverDescription(server);
       const tag = globalTag(server.global === true ? "global" : "local");
       console.log(`  ${bold(name)}  ${tag}  ${desc}`);
     }
@@ -35,7 +40,8 @@ function printServers(config: import("../lib/schemas").McpConfig): void {
 function renderSkillRow(skillsDir: string, skill: string): void {
   const skillDir = join(skillsDir, skill);
   const meta = readSkillMeta(skillDir);
-  const desc = meta.description ? dim(meta.description.split("\n")[0]!) : "";
+  const firstLine = meta.description?.split("\n")[0] ?? "";
+  const desc = firstLine ? dim(firstLine) : "";
   const tag = globalTag(isSkillGlobal(skillDir) ? "global" : "local");
   const tools = meta.allowedTools
     ? dim(`[tools: ${meta.allowedTools.join(", ")}]`)

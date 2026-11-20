@@ -1,5 +1,6 @@
 import { spawnSync } from "node:child_process";
 import { assertSafePath } from "./safe-input";
+import { envRecord } from "./type-guards";
 
 /** Fixed PATH for subprocess lookup — never trust process.env.PATH for spawning. */
 export const SAFE_PATH = "/usr/local/bin:/usr/bin:/bin:/opt/homebrew/bin";
@@ -42,7 +43,7 @@ export function resolveExecutable(cmd: string): string | null {
 /** Environment for child processes that must not inherit a writable PATH. */
 export function safeSpawnEnv(extra?: Record<string, string>): Record<string, string> {
   return {
-    ...(process.env as Record<string, string>),
+    ...envRecord(),
     ...extra,
     PATH: SAFE_PATH,
   };
