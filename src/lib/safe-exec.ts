@@ -1,7 +1,28 @@
+import { spawnSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { assertSafePath } from "./safe-input";
 import { envRecord } from "./type-guards";
+
+const TRUSTED_SECURITY_BIN = "/usr/bin/security";
+const SECURITY_LIST_KEYCHAINS = ["list-keychains"] as const;
+
+/** Run `security list-keychains` with a fixed binary path and argv (macOS keychain probe). */
+export function spawnSecurityListKeychains(): { ok: boolean; stdout: string } {
+  if (!existsSync(TRUSTED_SECURITY_BIN)) {
+    return { ok: false, stdout: "" };
+  }
+  assertSafePath(TRUSTED_SECURITY_BIN);
+  const result = spawnSync(TRUSTED_SECURITY_BIN, SECURITY_LIST_KEYCHAINS, {
+    encoding: "utf-8",
+    timeout: 2000,
+    env: { PATH: "/usr/bin:/bin" },
+  });
+  return {
+    ok: result.status === 0,
+    stdout: (result.stdout ?? "").toString().trim(),
+  };
+}
 
 /** Fixed PATH for subprocess lookup — never trust process.env.PATH for spawning. */
 export const SAFE_PATH = "/usr/local/bin:/usr/bin:/bin:/opt/homebrew/bin";

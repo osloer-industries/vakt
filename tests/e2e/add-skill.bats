@@ -132,6 +132,7 @@ teardown() {
 @test "add-skill prompts for global when no flag given and user answers y" {
   local skill_dir
   skill_dir="$(mktemp -d)"
+  export VAKT_EXTRA_PATH_ROOTS="${VAKT_EXTRA_PATH_ROOTS}:${skill_dir}"
   local skill_path="$skill_dir/prompt-global-skill"
   mkdir -p "$skill_path"
   create_test_skill "$skill_path" "prompt-global-skill"
@@ -149,6 +150,7 @@ teardown() {
 @test "add-skill prompts for global when no flag given and user answers n" {
   local skill_dir
   skill_dir="$(mktemp -d)"
+  export VAKT_EXTRA_PATH_ROOTS="${VAKT_EXTRA_PATH_ROOTS}:${skill_dir}"
   local skill_path="$skill_dir/prompt-local-skill"
   mkdir -p "$skill_path"
   create_test_skill "$skill_path" "prompt-local-skill"

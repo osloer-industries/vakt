@@ -30,21 +30,23 @@ function rootPrefix(root: string): string {
   return real.endsWith("/") ? real : `${real}/`;
 }
 
-/** Canonical absolute path for boundary checks (matches {@link rootPrefix} on macOS /var vs /private/var). */
-function canonicalPathForBoundaryCheck(logicalPath: string): string {
-  const resolved = resolve(logicalPath);
-  assertSafePath(resolved);
-  return existsSync(resolved) ? realpathSync.native(resolved) : resolved;
-}
-
-/** Prefix check on resolved paths without following symlinks on the candidate path. */
+/** Prefix check on resolved paths without following directory symlinks away from allowed roots. */
 function ensureUnderAllowedRootsLogical(logicalPath: string, allowedRoots: readonly string[]): string {
-  const abs = canonicalPathForBoundaryCheck(logicalPath);
+  const abs = resolve(logicalPath);
+  assertSafePath(abs);
   for (const root of allowedRoots) {
-    const prefix = rootPrefix(root);
-    const base = prefix.slice(0, -1);
-    if (abs === base || abs.startsWith(prefix)) {
+    const resolvedRoot = resolve(root);
+    const logicalPrefix = resolvedRoot.endsWith(sep) ? resolvedRoot : `${resolvedRoot}${sep}`;
+    if (abs === resolvedRoot || abs.startsWith(logicalPrefix)) {
       return abs;
+    }
+    if (existsSync(resolvedRoot) && existsSync(abs)) {
+      const realPrefix = rootPrefix(root);
+      const realBase = realPrefix.slice(0, -1);
+      const real = realpathSync.native(abs);
+      if (real === realBase || real.startsWith(realPrefix)) {
+        return abs;
+      }
     }
   }
   throw new Error("Path is outside allowed directories");

@@ -1,7 +1,7 @@
 import { join } from "node:path";
 import { chmodSync, existsSync, readFileSync } from "node:fs";
 import { AGENTS_DIR } from "./config";
-import { macosKeychainResponds } from "./macos-keychain-probe";
+import { spawnSecurityListKeychains } from "./safe-exec";
 
 type Backend = "keychain" | "pass" | "env";
 const SERVICE = process.env["AGENTS_SERVICE"] ?? "vakt";
@@ -29,7 +29,9 @@ async function run(cmd: string, args: string[]): Promise<{ stdout: string; ok: b
 }
 
 function keychainAccessible(): boolean {
-  return macosKeychainResponds();
+  if (process.platform !== "darwin") return false;
+  const { ok, stdout } = spawnSecurityListKeychains();
+  return ok && stdout.length > 0;
 }
 
 function detectBackend(): Backend {
