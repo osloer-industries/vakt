@@ -52,7 +52,13 @@ function handle(cmd: DaemonCmd, pm: ProcessManager, store: AuditStore): DaemonRe
       pm.restart(cmd.name);
       return { ok: true, data: { restarted: cmd.name } };
     case "audit/query":
-      return { ok: true, data: store.query({ serverName: cmd.serverName, limit: cmd.limit }) };
+      return {
+        ok: true,
+        data: store.query({
+          ...(cmd.serverName === undefined ? {} : { serverName: cmd.serverName }),
+          ...(cmd.limit === undefined ? {} : { limit: cmd.limit }),
+        }),
+      };
     default:
       return { ok: false, error: "Unknown command" };
   }

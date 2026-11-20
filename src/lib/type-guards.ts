@@ -52,12 +52,32 @@ export function currentPlatformKey(): PlatformKey {
   return "linux";
 }
 
+/** Strip Zod optional entries so maps satisfy exactOptionalPropertyTypes. */
+export function platformPathInput(
+  map: {
+    darwin?: string | undefined;
+    linux?: string | undefined;
+    win32?: string | undefined;
+  },
+): Partial<Record<PlatformKey, string>> {
+  const out: Partial<Record<PlatformKey, string>> = {};
+  if (map.darwin !== undefined) out.darwin = map.darwin;
+  if (map.linux !== undefined) out.linux = map.linux;
+  if (map.win32 !== undefined) out.win32 = map.win32;
+  return out;
+}
+
 export function platformStringPath(
-  map: string | Partial<Record<PlatformKey, string>>,
+  map: string | Partial<Record<PlatformKey, string>> | {
+    darwin?: string | undefined;
+    linux?: string | undefined;
+    win32?: string | undefined;
+  },
   platform: PlatformKey = currentPlatformKey(),
 ): string {
   if (typeof map === "string") return map;
-  return map[platform] ?? map.linux ?? "";
+  const paths = platformPathInput(map);
+  return paths[platform] ?? paths.linux ?? "";
 }
 
 export function nestedRecordGet(obj: unknown, dotKey: string): unknown {

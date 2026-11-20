@@ -26,7 +26,7 @@ function buildDenyData(rule: string): DenyData {
   
   return {
     rule,
-    hint,
+    ...(hint === undefined ? {} : { hint }),
     systemMessage: `vakt blocked tool — matched policy: ${rule}`,
   };
 }
@@ -81,12 +81,14 @@ function recordDeniedToolCall(
   opts.store.recordToolCall({
     sessionId, serverName: opts.serverName, toolName, runtime: "local",
     provider: opts.provider ?? "unknown", policyResult: "deny",
-    startedAt, endedAt, responseOk: false, policyRule,
+    startedAt, endedAt, responseOk: false,
+    ...(policyRule === undefined ? {} : { policyRule }),
   });
   recordToolCallSpan({
     serverName: opts.serverName, toolName, runtime: "local",
     policyResult: "deny", provider: opts.provider ?? "unknown",
-    sessionId, startedAt, endedAt, ok: false, policyRule,
+    sessionId, startedAt, endedAt, ok: false,
+    ...(policyRule === undefined ? {} : { policyRule }),
   });
 }
 

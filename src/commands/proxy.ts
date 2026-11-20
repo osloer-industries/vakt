@@ -8,6 +8,24 @@ import { randomUUID } from "node:crypto";
 import { requireStdioServer } from "../lib/stdio-server";
 import { envRecord } from "../lib/type-guards";
 
+async function drainReadableStream(
+  stream: ReadableStream<Uint8Array>,
+  onChunk: (chunk: Uint8Array) => void,
+): Promise<void> {
+  const reader = stream.getReader();
+  try {
+    const pump = async (): Promise<void> => {
+      const { done, value } = await reader.read();
+      if (done) return;
+      if (value !== undefined) onChunk(value);
+      return pump();
+    };
+    await pump();
+  } finally {
+    reader.releaseLock();
+  }
+}
+
 export function registerProxy(program: Command): void {
   program
     .command("proxy <server>")
@@ -22,10 +40,11 @@ export function registerProxy(program: Command): void {
       store.init();
       await initOtel(agentConfig.otel?.endpoint);
 
+      const provider = process.env["VAKT_PROVIDER"];
       const proxy = createProxy({
         serverName, policy, store,
         sessionId: randomUUID(),
-        provider: process.env["VAKT_PROVIDER"],
+        ...(provider === undefined ? {} : { provider }),
       });
 
       const proc = Bun.spawn(
@@ -53,15 +72,13 @@ export function registerProxy(program: Command): void {
 
       // Server stdout → audit recording → agent stdout
       // Awaited before exit so interceptResponse runs for every response before the process ends
-      const stdoutDone = (async () => {
-        for await (const chunk of proc.stdout) {
-          proxy.interceptResponse(chunk);
-          process.stdout.write(chunk);
-        }
-      })();
+      const stdoutDone = drainReadableStream(proc.stdout, (chunk) => {
+        proxy.interceptResponse(chunk);
+        process.stdout.write(chunk);
+      });
 
       // Server stderr → our stderr
-      void (async () => { for await (const chunk of proc.stderr) process.stderr.write(chunk); })();
+      void drainReadableStream(proc.stderr, (chunk) => { process.stderr.write(chunk); });
 
       void proc.exited.then(async (code) => {
         await stdoutDone;

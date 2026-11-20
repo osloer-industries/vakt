@@ -23,9 +23,11 @@ function readSettingsJson(path: string): Record<string, unknown> {
 function readPermissions(settings: Record<string, unknown>): { allow?: string[]; deny?: string[] } | undefined {
   const permissions = settings["permissions"];
   if (!isRecord(permissions)) return undefined;
+  const allow = readStringArray(permissions, "allow");
+  const deny = readStringArray(permissions, "deny");
   return {
-    allow: readStringArray(permissions, "allow"),
-    deny: readStringArray(permissions, "deny"),
+    ...(allow === undefined ? {} : { allow }),
+    ...(deny === undefined ? {} : { deny }),
   };
 }
 

@@ -42,8 +42,8 @@ export class DockerSandboxProvider implements SandboxProvider {
   constructor(opts: DockerOpts = {}) {
     this.socket         = opts.socket  ?? "/var/run/docker.sock";
     this.defaultImage   = opts.image   ?? "node:20-slim";
-    this.memory         = opts.memory;
-    this.cpus           = opts.cpus;
+    if (opts.memory !== undefined) this.memory = opts.memory;
+    if (opts.cpus !== undefined) this.cpus = opts.cpus;
     this.defaultNetwork = opts.network ?? "none";
   }
 
@@ -62,11 +62,10 @@ export class DockerSandboxProvider implements SandboxProvider {
   }
 
   private async req(method: string, path: string, body?: unknown): Promise<unknown> {
-    const res = await this.dockerFetch(path, {
-      method,
-      headers: body ? { "Content-Type": "application/json" } : undefined,
-      body: body ? JSON.stringify(body) : undefined,
-    });
+    const init: RequestInit = body === undefined
+      ? { method }
+      : { method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) };
+    const res = await this.dockerFetch(path, init);
     if (!res.ok && res.status !== 204) {
       const text = await res.text().catch(() => "");
       throw new Error(`Docker API ${method} ${path} → ${res.status}: ${text}`);

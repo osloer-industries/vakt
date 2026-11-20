@@ -70,6 +70,22 @@ interface RoutingRule {
   use: string | string[];
 }
 
+type ConfigRoutingRule = NonNullable<NonNullable<ModelRouter>["rules"]>[number];
+
+function normalizeRoutingRule(rule: ConfigRoutingRule): RoutingRule {
+  const ifBlock = rule.if;
+  const normalizedIf = ifBlock === undefined ? undefined : {
+    ...(ifBlock.promptTokens === undefined ? {} : { promptTokens: ifBlock.promptTokens }),
+    ...(ifBlock.toolCount === undefined ? {} : { toolCount: ifBlock.toolCount }),
+    ...(ifBlock.hasCode === undefined ? {} : { hasCode: ifBlock.hasCode }),
+    ...(ifBlock.hasMath === undefined ? {} : { hasMath: ifBlock.hasMath }),
+  };
+  return {
+    use: rule.use,
+    ...(normalizedIf === undefined ? {} : { if: normalizedIf }),
+  };
+}
+
 function getFirstBackend(use: string | string[]): string | null {
   const backends = Array.isArray(use) ? use : [use];
   return backends[0] ?? null;
@@ -118,7 +134,7 @@ export function selectBackend(
     const rule = rules[i];
     if (!rule) continue;
     
-    if (checkRuleCondition(rule, signals)) {
+    if (checkRuleCondition(normalizeRoutingRule(rule), signals)) {
       return {
         backend: getFirstBackend(rule.use),
         signals,

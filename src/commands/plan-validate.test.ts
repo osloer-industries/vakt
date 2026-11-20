@@ -170,10 +170,11 @@ function extractToolMentions(planText: string): Array<{ step: number; tool: stri
       const regex = new RegExp(`\\b${tool}\\s*\\(`, "i");
       if (regex.test(line)) {
         const argsMatch = /\(([^)]*)\)/.exec(line);
+        const args = argsMatch?.[1];
         mentions.push({
           step: stepNum || i + 1,
-          tool: tool,
-          args: argsMatch?.[1],
+          tool,
+          ...(args === undefined ? {} : { args }),
         });
       }
     }

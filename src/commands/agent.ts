@@ -11,11 +11,11 @@ function getProvider(name: string, config: AgentConfig): SandboxProvider {
   if (name === "docker") {
     const d = config.runtime?.docker;
     return new DockerSandboxProvider({
-      socket:  d?.socket,
-      image:   d?.image,
-      memory:  d?.memory,
-      cpus:    d?.cpus,
-      network: d?.network,
+      ...(d?.socket === undefined ? {} : { socket: d.socket }),
+      ...(d?.image === undefined ? {} : { image: d.image }),
+      ...(d?.memory === undefined ? {} : { memory: d.memory }),
+      ...(d?.cpus === undefined ? {} : { cpus: d.cpus }),
+      ...(d?.network === undefined ? {} : { network: d.network }),
     });
   }
   throw new Error(`Unknown sandbox provider: ${name}. Supported: docker`);
@@ -34,23 +34,29 @@ export function registerAgent(program: Command): void {
     .option("-i, --image <image>",   "Container image override")
     .option("-n, --name <name>",     "Session name (e.g. sprint-1-coder-0)")
     .option("--format <fmt>",        "Output format: full | id", "full")
-    .action(async (opts) => {
+    .action(async (opts: {
+      provider: string;
+      repo?: string;
+      image?: string;
+      name?: string;
+      format: string;
+    }) => {
       const config = loadAgentConfig();
       const provider = getProvider(opts.provider, config);
       const store = new AuditStore(defaultAuditDbPath());
       store.init();
 
       const handle = await provider.create({
-        repo:  opts.repo,
-        image: opts.image,
-        name:  opts.name,
+        ...(opts.repo === undefined ? {} : { repo: opts.repo }),
+        ...(opts.image === undefined ? {} : { image: opts.image }),
+        ...(opts.name === undefined ? {} : { name: opts.name }),
       });
 
       const sessionId = store.createSession({
         provider: provider.name,
         containerId: handle.id,
-        repo: opts.repo,
-        name: opts.name,
+        ...(opts.repo === undefined ? {} : { repo: opts.repo }),
+        ...(opts.name === undefined ? {} : { name: opts.name }),
       });
 
       if (opts.format === "id") {
@@ -154,10 +160,11 @@ export function registerAgent(program: Command): void {
     .command("list")
     .description("List all sessions")
     .option("--status <status>", "Filter by status (running|closed)")
-    .action((opts) => {
+    .action((opts: { status?: string }) => {
       const store = new AuditStore(defaultAuditDbPath());
       store.init();
-      const sessions = store.listSessions({ status: opts.status });
+      const listOpts = opts.status === undefined ? {} : { status: opts.status };
+      const sessions = store.listSessions(listOpts);
       if (sessions.length === 0) { console.log("no sessions"); return; }
       for (const s of sessions) {
         console.log(`${s.id}  ${s.provider}  ${s.status}  ${s.container_id}`);

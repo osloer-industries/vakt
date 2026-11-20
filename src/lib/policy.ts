@@ -62,39 +62,41 @@ export function mergePolicies(remote: Policy, local: Policy): Policy {
   return result.success ? result.data : remote; // Fall back to remote if merge produces invalid policy
 }
 
+function mergeServerToolRules(
+  remoteCfg: PolicyServerRules,
+  localCfg: PolicyServerRules,
+): PolicyServerRules {
+  const rTools = remoteCfg.tools ?? {};
+  const lTools = localCfg.tools ?? {};
+
+  const mergedTools: { allow?: string[]; deny?: string[] } = {
+    ...(rTools.allow === undefined ? {} : { allow: rTools.allow }),
+    ...(rTools.deny === undefined ? {} : { deny: rTools.deny }),
+  };
+
+  if (lTools.allow !== undefined || rTools.allow !== undefined) {
+    mergedTools.allow = uniqueSortedStrings([...new Set(rTools.allow ?? []), ...new Set(lTools.allow ?? [])]);
+  }
+
+  if (lTools.deny !== undefined || rTools.deny !== undefined) {
+    mergedTools.deny = uniqueSortedStrings([...new Set(rTools.deny ?? []), ...new Set(lTools.deny ?? [])]);
+  }
+
+  return { ...remoteCfg, tools: mergedTools };
+}
+
 function mergeServers(
   remoteServers: Record<string, PolicyServerRules>,
   localServers: Record<string, PolicyServerRules>
 ): Record<string, PolicyServerRules> {
   const merged = { ...remoteServers };
   for (const [name, localCfg] of Object.entries(localServers)) {
-    if (!(name in merged)) {
-      merged[name] = localCfg;
-      continue;
-    }
     const remoteCfg = merged[name];
     if (remoteCfg === undefined) {
       merged[name] = localCfg;
       continue;
     }
-    const rTools = remoteCfg.tools ?? {};
-    const lTools = localCfg.tools ?? {};
-
-    const mergedTools: { allow?: string[]; deny?: string[] } = { ...rTools };
-
-    if (lTools.allow !== undefined || rTools.allow !== undefined) {
-      const rAllow = new Set(rTools.allow ?? []);
-      const lAllow = new Set(lTools.allow ?? []);
-      mergedTools.allow = uniqueSortedStrings([...rAllow, ...lAllow]);
-    }
-
-    if (lTools.deny !== undefined || rTools.deny !== undefined) {
-      const rDeny = new Set(rTools.deny ?? []);
-      const lDeny = new Set(lTools.deny ?? []);
-      mergedTools.deny = uniqueSortedStrings([...rDeny, ...lDeny]);
-    }
-
-    merged[name] = { ...remoteCfg, tools: mergedTools };
+    merged[name] = mergeServerToolRules(remoteCfg, localCfg);
   }
   return merged;
 }

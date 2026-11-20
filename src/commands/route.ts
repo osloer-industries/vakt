@@ -22,7 +22,14 @@ export function registerRoute(program: Command): void {
     .option("--tools <number>", "Test: simulate tool count")
     .option("--has-code", "Test: simulate code detection")
     .option("--has-math", "Test: simulate math detection")
-    .action(async (opts) => {
+    .action(async (opts: {
+      test?: boolean;
+      port?: string;
+      tokens?: string;
+      tools?: string;
+      hasCode?: boolean;
+      hasMath?: boolean;
+    }) => {
       const config = loadAgentConfig();
       const routerConfig = config.modelRouter;
       
@@ -103,8 +110,8 @@ export function registerRoute(program: Command): void {
             toolCount: signals.toolCount,
             hasCode: signals.hasCode,
             hasMath: signals.hasMath,
-            matchedRule: result.matchedRule,
             latencyMs,
+            ...(result.matchedRule === undefined ? {} : { matchedRule: result.matchedRule }),
           });
           
           let apiKey: string | undefined;
