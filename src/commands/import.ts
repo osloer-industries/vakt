@@ -103,7 +103,7 @@ function mergeServers(
   return imported;
 }
 
-async function linkSkillEntry(entry: string, skillsSource: string, skillsTarget: string): Promise<void> {
+function linkSkillEntry(entry: string, skillsSource: string, skillsTarget: string): void {
   const safeEntry = assertSafeSkillName(entry);
   const src = join(skillsSource, safeEntry);
   const dest = join(skillsTarget, safeEntry);
@@ -114,11 +114,11 @@ async function linkSkillEntry(entry: string, skillsSource: string, skillsTarget:
   console.log(`  ✓  linked skill: ${entry}`);
 }
 
-async function importSkillsFromProvider(
+function importSkillsFromProvider(
   provider: ReturnType<typeof loadProviders>[string],
   platform: ReturnType<typeof currentPlatformKey>,
   skillsTarget: string,
-): Promise<void> {
+): void {
   const rawPath = platformStringPath(provider.skills.path, platform);
   if (!rawPath) return;
   const skillsSource = expandHome(rawPath);
@@ -131,20 +131,22 @@ async function importSkillsFromProvider(
     const boundedSource = resolveLocalDirectory(skillsSource, roots);
     const boundedTarget = resolveLocalDirectory(skillsTarget, roots);
     const entries = readdirSync(boundedSource);
-    await Promise.all(entries.map((entry) => linkSkillEntry(entry, boundedSource, boundedTarget)));
+    for (const entry of entries) {
+      linkSkillEntry(entry, boundedSource, boundedTarget);
+    }
   } catch {
     /* skip unreadable provider skill directory */
   }
 }
 
-async function importProviderSkills(
+function importProviderSkills(
   providers: ReturnType<typeof loadProviders>,
   platform: ReturnType<typeof currentPlatformKey>,
   skillsTarget: string,
-): Promise<void> {
-  await Promise.all(
-    Object.values(providers).map((provider) => importSkillsFromProvider(provider, platform, skillsTarget)),
-  );
+): void {
+  for (const provider of Object.values(providers)) {
+    importSkillsFromProvider(provider, platform, skillsTarget);
+  }
 }
 
 export function registerImport(program: Command): void {
@@ -187,7 +189,7 @@ export function registerImport(program: Command): void {
 
       // Import skills: symlink directories found in provider skill paths
       const skillsTarget = join(AGENTS_DIR, "skills");
-      await importProviderSkills(providers, platform, skillsTarget);
+      importProviderSkills(providers, platform, skillsTarget);
 
       await Bun.write(mcpPath, JSON.stringify(existing, null, 2));
       if (imported === 0) {
