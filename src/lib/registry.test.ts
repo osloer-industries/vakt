@@ -2,21 +2,27 @@ import { describe, it, expect } from "bun:test";
 import { RegistryClient } from "./registry";
 import { RegistryEntrySchema } from "./schemas";
 
-function withMockFetch(mock: typeof fetch, fn: () => Promise<void>): Promise<void> {
+type TestFetch = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+
+function asFetch(impl: TestFetch): typeof fetch {
+  return Object.assign(impl, { preconnect: globalThis.fetch.preconnect.bind(globalThis.fetch) });
+}
+
+function withMockFetch(mock: TestFetch, fn: () => Promise<void>): Promise<void> {
   const origFetch = globalThis.fetch;
-  globalThis.fetch = mock;
+  globalThis.fetch = asFetch(mock);
   return fn().finally(() => {
     globalThis.fetch = origFetch;
   });
 }
 
-const fetch404: typeof fetch = () => Promise.resolve(new Response(null, { status: 404 }));
-const fetch500: typeof fetch = () => Promise.resolve(new Response(null, { status: 500 }));
-const fetch503: typeof fetch = () => Promise.resolve(new Response(null, { status: 503 }));
-const fetchEmptyJson: typeof fetch = () =>
+const fetch404: TestFetch = () => Promise.resolve(new Response(null, { status: 404 }));
+const fetch500: TestFetch = () => Promise.resolve(new Response(null, { status: 500 }));
+const fetch503: TestFetch = () => Promise.resolve(new Response(null, { status: 503 }));
+const fetchEmptyJson: TestFetch = () =>
   Promise.resolve(new Response(JSON.stringify({}), { status: 200 }));
 
-function fetchJson(payload: unknown): typeof fetch {
+function fetchJson(payload: unknown): TestFetch {
   return () => Promise.resolve(new Response(JSON.stringify(payload), { status: 200 }));
 }
 

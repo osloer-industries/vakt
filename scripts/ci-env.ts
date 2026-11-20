@@ -29,10 +29,11 @@ export function ciExecFile(
     (part): part is string => part !== undefined && part.length > 0,
   );
   const env = { ...process.env, ...extraEnv, PATH: pathParts.join(":") };
-  return execFileSync(file, args, {
+  const result = execFileSync(file, args, {
     ...execOptions,
     env,
-  }) as string | undefined;
+  });
+  return typeof result === "string" ? result : undefined;
 }
 
 const BIN_CANDIDATES: Record<string, string[]> = {

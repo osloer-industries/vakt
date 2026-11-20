@@ -8,8 +8,8 @@ export function registerDaemon(program: Command): void {
   const daemon = program.command("daemon").description("Manage the vakt daemon process");
 
   // Hidden subcommand used for self-exec in both dev and compiled mode.
-  daemon.command("_run", { hidden: true }).action(async () => {
-    await runDaemon();
+  daemon.command("_run", { hidden: true }).action(() => {
+    runDaemon();
   });
 
   daemon.command("start").description("Start the daemon").action(async () => {

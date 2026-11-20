@@ -12,17 +12,20 @@ import {
   platformStringPath,
 } from "../lib/type-guards";
 
-function parseServerEntry(r: ReturnType<typeof RawProviderServerSchema.parse>): McpServer | null {
-  if (r.url || r.httpUrl || r.serverUrl || r.type === "http") {
-    const url = r.url ?? r.httpUrl ?? r.serverUrl;
-    if (!url) return null;
-    return {
-      transport: "http",
-      url,
-      ...(r.headers ? { headers: r.headers } : {}),
-      global: false,
-    };
-  }
+type RawServer = ReturnType<typeof RawProviderServerSchema.parse>;
+
+function parseHttpServerEntry(r: RawServer): McpServer | null {
+  const url = r.url ?? r.httpUrl ?? r.serverUrl;
+  if (!url) return null;
+  return {
+    transport: "http",
+    url,
+    ...(r.headers ? { headers: r.headers } : {}),
+    global: false,
+  };
+}
+
+function parseStdioServerEntry(r: RawServer): McpServer | null {
   const cmdRaw = r.command;
   if (cmdRaw === undefined) return null;
   const command = Array.isArray(cmdRaw) ? cmdRaw[0] : cmdRaw;
@@ -43,6 +46,13 @@ function parseServerEntry(r: ReturnType<typeof RawProviderServerSchema.parse>): 
     ...(r.cwd ? { cwd: r.cwd } : {}),
     global: false,
   };
+}
+
+function parseServerEntry(r: RawServer): McpServer | null {
+  if (r.url || r.httpUrl || r.serverUrl || r.type === "http") {
+    return parseHttpServerEntry(r);
+  }
+  return parseStdioServerEntry(r);
 }
 
 function parseConfigFile(content: string, format: "json" | "toml"): Record<string, unknown> {
@@ -103,22 +113,31 @@ async function linkSkillEntry(entry: string, skillsSource: string, skillsTarget:
   console.log(`  ✓  linked skill: ${entry}`);
 }
 
+async function importSkillsFromProvider(
+  provider: ReturnType<typeof loadProviders>[string],
+  platform: ReturnType<typeof currentPlatformKey>,
+  skillsTarget: string,
+): Promise<void> {
+  const rawPath = platformStringPath(provider.skills.path, platform);
+  if (!rawPath) return;
+  const skillsSource = expandHome(rawPath);
+  if (!existsSync(skillsSource) || skillsSource === skillsTarget) return;
+  try {
+    const entries = readdirSync(skillsSource);
+    await Promise.all(entries.map((entry) => linkSkillEntry(entry, skillsSource, skillsTarget)));
+  } catch {
+    /* skip unreadable provider skill directory */
+  }
+}
+
 async function importProviderSkills(
   providers: ReturnType<typeof loadProviders>,
   platform: ReturnType<typeof currentPlatformKey>,
-  skillsTarget: string
+  skillsTarget: string,
 ): Promise<void> {
-  for (const provider of Object.values(providers)) {
-    const rawPath = platformStringPath(provider.skills.path, platform);
-    if (!rawPath) continue;
-    const skillsSource = expandHome(rawPath);
-    if (!existsSync(skillsSource) || skillsSource === skillsTarget) continue;
-    try {
-      for (const entry of readdirSync(skillsSource)) {
-        await linkSkillEntry(entry, skillsSource, skillsTarget);
-      }
-    } catch {}
-  }
+  await Promise.all(
+    Object.values(providers).map((provider) => importSkillsFromProvider(provider, platform, skillsTarget)),
+  );
 }
 
 export function registerImport(program: Command): void {

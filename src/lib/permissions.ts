@@ -85,6 +85,62 @@ function buildPerms(
 
 // ── Claude settings adapter ───────────────────────────────────────────────────
 
+function readClaudeSettings(resolvedPath: string, warnings: string[]): ClaudeSettings {
+  if (!existsSync(resolvedPath)) return {};
+  try {
+    const raw = parseJsonUnknown(readFileSync(resolvedPath, "utf-8"));
+    return isRecord(raw) ? { ...raw } : {};
+  } catch {
+    warnings.push(`could not parse ${resolvedPath} — treating as empty`);
+    return {};
+  }
+}
+
+function mergeClaudePermissions(
+  settings: ClaudeSettings,
+  allowStrings: string[],
+  denyStrings: string[],
+): ClaudeSettings {
+  const prevMarker: VaktMarker = settings[VAKT_MARKER_KEY] ?? { allow: [], deny: [] };
+  const prevAllowSet = new Set(prevMarker.allow);
+  const prevDenySet = new Set(prevMarker.deny);
+
+  const existingAllow = (settings.permissions?.allow ?? []).filter((e) => !prevAllowSet.has(e));
+  const existingDeny = (settings.permissions?.deny ?? []).filter((e) => !prevDenySet.has(e));
+
+  const mergedAllow = [...existingAllow, ...allowStrings];
+  const mergedDeny = [...existingDeny, ...denyStrings];
+  const perms = buildPerms(settings.permissions, mergedAllow, mergedDeny);
+
+  const updated: ClaudeSettings = {
+    ...settings,
+    [VAKT_MARKER_KEY]: { allow: allowStrings, deny: denyStrings },
+  };
+  if (Object.keys(perms).length > 0) {
+    updated.permissions = { ...perms };
+  } else {
+    delete updated.permissions;
+  }
+  if (allowStrings.length === 0 && denyStrings.length === 0) {
+    delete updated[VAKT_MARKER_KEY];
+  }
+  return updated;
+}
+
+function atomicWriteJson(resolvedPath: string, updated: ClaudeSettings): void {
+  const dir = dirname(resolvedPath);
+  if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
+  const body = JSON.stringify(updated, null, 2) + "\n";
+  const tmp = join(dir, `.vakt-settings-${randomBytes(6).toString("hex")}.tmp`);
+  writeFileSync(tmp, body, { encoding: "utf-8" });
+  try {
+    renameSync(tmp, resolvedPath); // NOSONAR — intentional atomic write
+  } catch {
+    writeFileSync(resolvedPath, body, { encoding: "utf-8" });
+    try { unlinkSync(tmp); } catch { /* ignore */ }
+  }
+}
+
 export class ClaudeSettingsAdapter implements PermissionsAdapter {
   constructor(private readonly settingsPath: string) {}
 
@@ -106,67 +162,9 @@ export class ClaudeSettingsAdapter implements PermissionsAdapter {
       return { written: false, path: resolvedPath, allow: allowStrings, deny: denyStrings, warnings };
     }
 
-    // Read existing settings (or start empty)
-    let settings: ClaudeSettings = {};
-    if (existsSync(resolvedPath)) {
-      try {
-        const raw = parseJsonUnknown(readFileSync(resolvedPath, "utf-8"));
-        settings = isRecord(raw) ? { ...raw } : {};
-      } catch {
-        // Treat unparseable file as empty — safer than aborting the sync
-        warnings.push(`could not parse ${resolvedPath} — treating as empty`);
-      }
-    }
-
-    // Strip previously vakt-managed entries from permissions arrays
-    const prevMarker: VaktMarker = settings[VAKT_MARKER_KEY] ?? { allow: [], deny: [] };
-    const prevAllowSet = new Set(prevMarker.allow);
-    const prevDenySet = new Set(prevMarker.deny);
-
-    const existingAllow = (settings.permissions?.allow ?? []).filter(
-      (e) => !prevAllowSet.has(e),
-    );
-    const existingDeny = (settings.permissions?.deny ?? []).filter(
-      (e) => !prevDenySet.has(e),
-    );
-
-    // Build merged arrays: user-managed entries first, vakt-managed appended.
-    // Always assign explicitly so that clearing vakt entries removes them from the file.
-    // A conditional spread would leave old values from ...(settings.permissions ?? {}).
-    const mergedAllow = [...existingAllow, ...allowStrings];
-    const mergedDeny  = [...existingDeny,  ...denyStrings];
-
-    const perms = buildPerms(settings.permissions, mergedAllow, mergedDeny);
-
-    const updated: ClaudeSettings = {
-      ...settings,
-      [VAKT_MARKER_KEY]: { allow: allowStrings, deny: denyStrings },
-    };
-    if (Object.keys(perms).length > 0) {
-      updated.permissions = { ...perms };
-    } else {
-      delete updated.permissions;
-    }
-
-    // Remove marker when vakt has nothing to manage
-    if (allowStrings.length === 0 && denyStrings.length === 0) {
-      delete updated[VAKT_MARKER_KEY];
-    }
-
-    // Atomic write: temp file + rename
-    const dir = dirname(resolvedPath);
-    if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
-
-    const tmp = join(dir, `.vakt-settings-${randomBytes(6).toString("hex")}.tmp`);
-    writeFileSync(tmp, JSON.stringify(updated, null, 2) + "\n", { encoding: "utf-8" });
-    // rename is atomic on POSIX; on Windows it overwrites via separate copy+delete
-    try {
-      renameSync(tmp, resolvedPath); // NOSONAR — intentional atomic write
-    } catch {
-      // Fallback for cross-device rename (e.g. tmpfs → home on some Linux configs)
-      writeFileSync(resolvedPath, JSON.stringify(updated, null, 2) + "\n", { encoding: "utf-8" });
-      try { unlinkSync(tmp); } catch { /* ignore */ }
-    }
+    const settings = readClaudeSettings(resolvedPath, warnings);
+    const updated = mergeClaudePermissions(settings, allowStrings, denyStrings);
+    atomicWriteJson(resolvedPath, updated);
 
     return { written: true, path: resolvedPath, allow: allowStrings, deny: denyStrings, warnings };
   }
@@ -179,7 +177,5 @@ export function makePermissionsAdapter(
   path: string,
 ): PermissionsAdapter {
   if (format === "claude-settings") return new ClaudeSettingsAdapter(path);
-  // exhaustive check — format is a union; TypeScript cannot narrow a single-variant union without this
-  const _: never = format;
-  throw new Error(`unsupported format: ${_}`);
+  throw new Error("unsupported permissions format");
 }

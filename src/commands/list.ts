@@ -31,7 +31,7 @@ function printServers(config: import("../lib/schemas").McpConfig): void {
   } else {
     for (const [name, server] of entries) {
       const desc = serverDescription(server);
-      const tag = globalTag(server.global === true ? "global" : "local");
+      const tag = globalTag(server.global ? "global" : "local");
       console.log(`  ${bold(name)}  ${tag}  ${desc}`);
     }
   }

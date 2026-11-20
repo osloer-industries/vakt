@@ -275,7 +275,7 @@ describe("formatForProvider", () => {
 
   it("maps HTTP server to urlProperty", () => {
     const result = formatForProvider(
-      { api: { transport: "http", url: "https://example.com/mcp", global: false } },
+      { api: { transport: "http", url: "https://example.com/mcp" } },
       makeProvider(),
     );
     expect(result["api"]?.["url"]).toBe("https://example.com/mcp");

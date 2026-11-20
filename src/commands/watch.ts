@@ -76,8 +76,32 @@ function handleDriftEvent(
   }
 }
 
-async function runWatchLoop(
-  reader: ReadableStreamDefaultReader<Uint8Array>,
+function consumeWatchChunk(
+  buffer: string,
+  chunk: Uint8Array,
+  decoder: TextDecoder,
+  watchPaths: string[],
+  auditLog: string,
+  snapshotDir: string,
+  opts: { revert?: boolean },
+): string {
+  let next = buffer + decoder.decode(chunk);
+  const lines = next.split("\n");
+  next = lines.pop() ?? "";
+  for (const line of lines) {
+    const changedPath = line.trim();
+    if (!changedPath) continue;
+    handleDriftEvent(changedPath, watchPaths, auditLog, snapshotDir, opts);
+  }
+  return next;
+}
+
+type ByteStreamReader = {
+  read(): Promise<ReadableStreamReadResult<Uint8Array>>;
+};
+
+async function readWatchStream(
+  reader: ByteStreamReader,
   watchPaths: string[],
   auditLog: string,
   snapshotDir: string,
@@ -85,18 +109,17 @@ async function runWatchLoop(
 ): Promise<void> {
   const decoder = new TextDecoder();
   let buffer = "";
-  while (true) {
+
+  const pump = async (): Promise<void> => {
     const { value, done } = await reader.read();
-    if (done) break;
-    buffer += decoder.decode(value);
-    const lines = buffer.split("\n");
-    buffer = lines.pop() ?? "";
-    for (const line of lines) {
-      const changedPath = line.trim();
-      if (!changedPath) continue;
-      handleDriftEvent(changedPath, watchPaths, auditLog, snapshotDir, opts);
+    if (done) return;
+    if (value) {
+      buffer = consumeWatchChunk(buffer, value, decoder, watchPaths, auditLog, snapshotDir, opts);
     }
-  }
+    await pump();
+  };
+
+  await pump();
 }
 
 export function registerWatch(program: Command): void {
@@ -150,7 +173,7 @@ export function registerWatch(program: Command): void {
       const proc = Bun.spawn([watcher, ...watchArgs], { stdout: "pipe", stderr: "pipe" });
       const auditLog = join(agentsDir, "audit.log");
 
-      await runWatchLoop(proc.stdout.getReader(), watchPaths, auditLog, snapshotDir, opts);
+      await readWatchStream(proc.stdout.getReader(), watchPaths, auditLog, snapshotDir, opts);
 
       // Suppress unused variable warning
       void ok;

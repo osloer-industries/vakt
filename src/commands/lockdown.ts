@@ -18,23 +18,25 @@ const dry    = (s: string) => console.log(`  ${dim("[dry-run]")}  ${s}`);
 
 function writeJsonFile(path: string, data: unknown): void {
   mkdirSync(dirname(path), { recursive: true });
-  Bun.write(path, JSON.stringify(data, null, 2) + "\n");
+  void Bun.write(path, JSON.stringify(data, null, 2) + "\n");
+}
+
+async function auditOneServer(name: string, cfg: McpServer): Promise<void> {
+  const pkgInfo = resolveVerifyTarget(cfg);
+  if (!pkgInfo) {
+    info(`${name}: verification not applicable`);
+    return;
+  }
+  const vResult = await verifyPackage(pkgInfo.pkgType, pkgInfo.identifier, pkgInfo.version);
+  if (vResult.ok) {
+    ok(`${name}: verified (${vResult.signer}, ${vResult.source})`);
+  } else {
+    warn(`${name}: unverified — ${vResult.reason}`);
+  }
 }
 
 async function auditSupplyChain(mcpConfig: McpConfig): Promise<void> {
-  for (const [name, cfg] of Object.entries(mcpConfig)) {
-    const pkgInfo = resolveVerifyTarget(cfg);
-    if (!pkgInfo) {
-      info(`${name}: verification not applicable`);
-      continue;
-    }
-    const vResult = await verifyPackage(pkgInfo.pkgType, pkgInfo.identifier, pkgInfo.version);
-    if (vResult.ok) {
-      ok(`${name}: verified (${vResult.signer}, ${vResult.source})`);
-    } else {
-      warn(`${name}: unverified — ${vResult.reason}`);
-    }
-  }
+  await Promise.all(Object.entries(mcpConfig).map(([name, cfg]) => auditOneServer(name, cfg)));
 }
 
 export function registerLockdown(program: Command): void {

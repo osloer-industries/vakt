@@ -35,9 +35,10 @@ export async function resolveServer(
   }
 
   async function resolveRecord(rec: Record<string, string>): Promise<Record<string, string>> {
-    const out: Record<string, string> = {};
-    for (const [k, v] of Object.entries(rec)) out[k] = await resolveValue(v);
-    return out;
+    const pairs = await Promise.all(
+      Object.entries(rec).map(async ([k, v]) => [k, await resolveValue(v)] as const),
+    );
+    return Object.fromEntries(pairs);
   }
 
   if ("transport" in server && server.transport === "http") {
@@ -70,10 +71,15 @@ export async function resolveAll(
   config: McpConfig,
   paths: Record<string, string>
 ): Promise<{ resolved: ResolvedConfig; allMissing: Record<string, string[]> }> {
+  const pairs = await Promise.all(
+    Object.entries(config).map(async ([name, server]) => {
+      const { server: r, missing } = await resolveServer(name, server, paths);
+      return { name, r, missing };
+    }),
+  );
   const resolved: ResolvedConfig = {};
   const allMissing: Record<string, string[]> = {};
-  for (const [name, server] of Object.entries(config)) {
-    const { server: r, missing } = await resolveServer(name, server, paths);
+  for (const { name, r, missing } of pairs) {
     resolved[name] = r;
     if (missing.length > 0) allMissing[name] = missing;
   }
@@ -269,6 +275,27 @@ export function isIgnoredSkillEntry(entry: string): boolean {
   return entry.startsWith(".") || SYSTEM_FILES.has(entry);
 }
 
+function linkOneSkill(
+  entry: string,
+  skillsSource: string,
+  skillsTarget: string,
+  dryRun: boolean,
+  globalOnly: boolean,
+): { kind: "linked" | "skipped" | "error"; message: string } | null {
+  const src = join(skillsSource, entry);
+  if (globalOnly && !isSkillGlobal(src)) return null;
+  const dest = join(skillsTarget, entry);
+  if (existsSync(dest)) return { kind: "skipped", message: entry };
+  if (dryRun) return { kind: "linked", message: `[dry-run] Would link: ${entry}` };
+  try {
+    symlinkSync(src, dest);
+    return { kind: "linked", message: entry };
+  } catch (e) {
+    const detail = e instanceof Error ? e.message : String(e);
+    return { kind: "error", message: `${entry}: ${detail}` };
+  }
+}
+
 export function syncSkills(
   skillsSource: string,
   skillsTarget: string,
@@ -282,18 +309,13 @@ export function syncSkills(
   if (!existsSync(skillsSource)) return { linked, skipped, errors };
   if (!dryRun) mkdirSync(skillsTarget, { recursive: true });
 
-  const entries = readdirSync(skillsSource).filter(e => !isIgnoredSkillEntry(e));
+  const entries = readdirSync(skillsSource).filter((e) => !isIgnoredSkillEntry(e));
   for (const entry of entries) {
-    const dest = join(skillsTarget, entry);
-    const src = join(skillsSource, entry);
-    if (globalOnly && !isSkillGlobal(src)) continue;
-    if (existsSync(dest)) { skipped.push(entry); continue; }
-    if (dryRun) {
-      linked.push(`[dry-run] Would link: ${entry}`);
-    } else {
-      try { symlinkSync(src, dest); linked.push(entry); }
-      catch (e) { errors.push(`${entry}: ${e}`); }
-    }
+    const result = linkOneSkill(entry, skillsSource, skillsTarget, dryRun, globalOnly);
+    if (result === null) continue;
+    if (result.kind === "linked") linked.push(result.message);
+    else if (result.kind === "skipped") skipped.push(result.message);
+    else errors.push(result.message);
   }
   return { linked, skipped, errors };
 }

@@ -65,6 +65,6 @@ export class RegistryClient {
       };
     }
 
-    throw new Error(`Unsupported registry type: ${pkg.registryType}`);
+    throw new Error(`Unsupported registry type: ${String(pkg.registryType)}`);
   }
 }

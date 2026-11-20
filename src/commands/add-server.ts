@@ -73,49 +73,20 @@ function enforceRegistryVerification(
   }
 }
 
-async function handleRegistryServer(
-  config: ReturnType<typeof loadMcpConfig>,
-  name: string,
+function buildRegistryFileEntry(
   firstArg: string,
   makeGlobal: boolean,
-  mcpPath: string,
-): Promise<void> {
-  const client = new RegistryClient();
-  let entry;
-  try {
-    entry = await client.lookup(firstArg);
-  } catch (e) {
-    console.error(`Registry lookup failed: ${e}`);
-    process.exit(1);
-  }
-  if (!entry) {
-    console.error(`Not found in MCP registry: ${firstArg}`);
-    process.exit(1);
-  }
-  const resolved = client.resolvePackage(entry);
-  const isNpx = resolved.command === "npx" || resolved.command === "bunx";
-  const pkgType = isNpx ? "npm" : "oci";
-  const identifier = isNpx
-    ? resolved.args.find(a => !a.startsWith("-")) ?? entry.server.name
-    : entry.server.name;
-
-  const policy = loadMergedPolicy(AGENTS_DIR);
-  const engine = policy ? new PolicyEngine(policy) : null;
-  const registryPolicy = engine?.registryPolicy ?? "allow-unverified";
-
-  const vResult = await verifyPackage(pkgType, identifier, entry.server.version);
-  
-  enforceRegistryVerification(firstArg, registryPolicy, vResult);
-  const fileText = existsSync(mcpPath) ? readFileSync(mcpPath, "utf-8") : "{}";
-  const parsed = parseJsonUnknown(fileText);
-  const file = isRecord(parsed) ? parsed : {};
-  file[name] = {
+  entry: NonNullable<Awaited<ReturnType<RegistryClient["lookup"]>>>,
+  resolved: ReturnType<RegistryClient["resolvePackage"]>,
+  vResult: Awaited<ReturnType<typeof verifyPackage>>,
+): Record<string, unknown> {
+  return {
     registry: firstArg,
     ...(entry.server.version ? { version: entry.server.version } : {}),
     command: resolved.command,
     args: resolved.args,
     ...(resolved.requiredSecrets.length > 0
-      ? { env: Object.fromEntries(resolved.requiredSecrets.map(k => [k, `secret:${k}`])) }
+      ? { env: Object.fromEntries(resolved.requiredSecrets.map((k) => [k, `secret:${k}`])) }
       : {}),
     global: makeGlobal,
     verified: vResult.ok,
@@ -126,16 +97,65 @@ async function handleRegistryServer(
       verificationFailed: vResult.reason,
     }),
   };
+}
+
+function printRegistrySecrets(requiredSecrets: string[]): void {
+  if (requiredSecrets.length === 0) return;
+  console.log(`\nSecrets needed:`);
+  requiredSecrets.forEach((k) =>
+    console.log(`  vakt secrets set ${sanitizeForLog(k)} <value>`));
+}
+
+async function lookupRegistryEntry(
+  client: RegistryClient,
+  firstArg: string,
+): Promise<Awaited<ReturnType<RegistryClient["lookup"]>>> {
+  try {
+    return await client.lookup(firstArg);
+  } catch (e) {
+    console.error(`Registry lookup failed: ${e instanceof Error ? e.message : String(e)}`);
+    process.exit(1);
+    return null;
+  }
+}
+
+async function handleRegistryServer(
+  _config: ReturnType<typeof loadMcpConfig>,
+  name: string,
+  firstArg: string,
+  makeGlobal: boolean,
+  mcpPath: string,
+): Promise<void> {
+  const client = new RegistryClient();
+  const entry = await lookupRegistryEntry(client, firstArg);
+  if (!entry) {
+    console.error(`Not found in MCP registry: ${firstArg}`);
+    process.exit(1);
+  }
+  const resolved = client.resolvePackage(entry);
+  const isNpx = resolved.command === "npx" || resolved.command === "bunx";
+  const pkgType = isNpx ? "npm" : "oci";
+  const identifier = isNpx
+    ? resolved.args.find((a) => !a.startsWith("-")) ?? entry.server.name
+    : entry.server.name;
+
+  const policy = loadMergedPolicy(AGENTS_DIR);
+  const engine = policy ? new PolicyEngine(policy) : null;
+  const registryPolicy = engine?.registryPolicy ?? "allow-unverified";
+
+  const vResult = await verifyPackage(pkgType, identifier, entry.server.version);
+  enforceRegistryVerification(firstArg, registryPolicy, vResult);
+
+  const fileText = existsSync(mcpPath) ? readFileSync(mcpPath, "utf-8") : "{}";
+  const parsed = parseJsonUnknown(fileText);
+  const file = isRecord(parsed) ? parsed : {};
+  file[name] = buildRegistryFileEntry(firstArg, makeGlobal, entry, resolved, vResult);
   await Bun.write(mcpPath, JSON.stringify(file, null, 2));
   console.log(`Added ${name} from registry (${firstArg})`);
   if (vResult.ok) {
     console.log(`  ✓ Verified by ${vResult.signer}`);
   }
-  if (resolved.requiredSecrets.length > 0) {
-    console.log(`\nSecrets needed:`);
-    resolved.requiredSecrets.forEach(k =>
-      console.log(`  vakt secrets set ${sanitizeForLog(k)} <value>`));
-  }
+  printRegistrySecrets(resolved.requiredSecrets);
 }
 
 export function registerAddServer(program: Command): void {

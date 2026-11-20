@@ -18,7 +18,7 @@ for (const file of walkRepoFiles(".", { extensions: [".json"] })) {
     JSON.parse(readFileSync(file, "utf8"));
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    throw new Error(`Invalid JSON in ${file}: ${message}`);
+    throw new Error(`Invalid JSON in ${file}: ${message}`, { cause: error });
   }
 }
 

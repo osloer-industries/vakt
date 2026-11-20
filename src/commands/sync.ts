@@ -115,10 +115,10 @@ function syncSingleServer(
   }
 }
 
-async function syncViaCliProvider(
+function syncViaCliProvider(
   servers: Record<string, Record<string, unknown>>,
   dryRun: boolean,
-): Promise<void> {
+): void {
   if (dryRun) { info(`[dry-run] Would run claude mcp add/remove`); return; }
   const claudeBin = resolveCmd("claude");
   if (!claudeBin) { warn("claude not found, skipping CLI sync"); return; }
@@ -141,7 +141,7 @@ async function syncProviderMcp(
   dryRun: boolean,
 ): Promise<void> {
   if (provider.syncMethod === "cli") {
-    await syncViaCliProvider(servers, dryRun);
+    syncViaCliProvider(servers, dryRun);
     return;
   }
 
@@ -162,7 +162,7 @@ async function syncProviderMcp(
 
 export function filterGlobal(mcpConfig: McpConfig): McpConfig {
   return Object.fromEntries(
-    Object.entries(mcpConfig).filter(([, server]) => server.global === true)
+    Object.entries(mcpConfig).filter(([, server]) => server.global)
   );
 }
 
@@ -215,11 +215,11 @@ async function syncMcpServers(
     }
   }
 
-  for (const provider of providers) {
+  await Promise.all(providers.map(async (provider) => {
     console.log(`\n  ${bold(provider.displayName)}`);
     if (!isInstalled(provider.detectCommand)) {
       warn(`${provider.detectCommand} not found, skipping`);
-      continue;
+      return;
     }
 
     const serversForProvider = applyProxyWrap(resolved, withProxy);
@@ -228,9 +228,9 @@ async function syncMcpServers(
       await syncProviderMcp(provider, formatted, dryRun);
       if (!dryRun) ok(`synced to ${provider.displayName}`);
     } catch (e) {
-      err(`sync failed for ${provider.displayName}: ${e}`);
+      err(`sync failed for ${provider.displayName}: ${e instanceof Error ? e.message : String(e)}`);
     }
-  }
+  }));
 }
 
 function logPermissionsResult(result: import("../lib/permissions").PermissionsResult, dryRun: boolean): void {
@@ -307,11 +307,11 @@ function syncPermissions(providers: Provider[], policy: Policy | null, dryRun: b
   }
 }
 
-async function syncInstructionsToProviders(
+function syncInstructionsToProviders(
   providers: Provider[],
   agentsDir: string,
   dryRun: boolean,
-): Promise<void> {
+): void {
   const source = join(agentsDir, "AGENTS.md");
   if (!existsSync(source)) {
     info("No ~/.agents/AGENTS.md — skipping AGENTS.md instruction sync");
@@ -356,12 +356,12 @@ async function syncInstructionsToProviders(
   }
 }
 
-async function syncSkillsToProviders(
+function syncSkillsToProviders(
   providers: Provider[],
   agentsDir: string,
   dryRun: boolean,
   globalOnly = true,
-): Promise<void> {
+): void {
   console.log(`\n${bold("── Skills ──────────────────────────────────────────────────")}`);
   const skillsSource = join(agentsDir, "skills");
 
@@ -411,8 +411,7 @@ export async function refreshSkills(agentsDir: string, dryRun: boolean): Promise
   const skillsDir = join(agentsDir, "skills");
   if (!existsSync(skillsDir)) return;
 
-  let anyChecked = false;
-  for (const entry of readdirSync(skillsDir)) {
+  const gitSkills = readdirSync(skillsDir).flatMap((entry) => {
     const skillPath = join(skillsDir, entry);
     let realPath: string;
     try {
@@ -420,13 +419,14 @@ export async function refreshSkills(agentsDir: string, dryRun: boolean): Promise
     } catch {
       realPath = skillPath;
     }
-    if (!isGitRepo(realPath)) continue;
+    return isGitRepo(realPath) ? [{ entry, realPath }] : [];
+  });
+  if (gitSkills.length === 0) return;
 
-    anyChecked = true;
+  await gitSkills.reduce<Promise<void>>(async (prev, { entry, realPath }) => {
+    await prev;
     await handleSkillUpdate(entry, realPath, dryRun);
-  }
-
-  if (!anyChecked) return;
+  }, Promise.resolve());
 }
 
 async function promptUnclassifiedResources(agentsDir: string): Promise<void> {
@@ -441,21 +441,23 @@ async function promptUnclassifiedResources(agentsDir: string): Promise<void> {
     const configPath = join(agentsDir, "mcp-config.json");
     const parsed = parseJsonUnknown(readFileSync(configPath, "utf-8"));
     const rawConfig = isRecord(parsed) ? parsed : {};
-    for (const name of unclassifiedServers) {
+    await unclassifiedServers.reduce<Promise<void>>(async (prev, name) => {
+      await prev;
       const isGlobal = await promptBoolean(`  Server '${name}': sync globally to all providers?`);
       const entry = rawConfig[name];
       if (isRecord(entry)) entry.global = isGlobal;
-    }
+    }, Promise.resolve());
     writeFileSync(configPath, JSON.stringify(rawConfig, null, 2) + "\n");
   }
 
   if (unclassifiedSkills.length > 0) {
     const skillsDirPath = join(agentsDir, "skills");
-    for (const skill of unclassifiedSkills) {
+    await unclassifiedSkills.reduce<Promise<void>>(async (prev, skill) => {
+      await prev;
       const skillPath = join(skillsDirPath, skill);
       const isGlobal = await promptBoolean(`  Skill '${skill}': sync globally to all providers?`);
       setSkillGlobal(skillPath, isGlobal);
-    }
+    }, Promise.resolve());
   }
 }
 
@@ -523,7 +525,7 @@ async function syncSkillPhase(
     console.log(`\n${bold("── Skill Updates ───────────────────────────────────────────")}`);
     await refreshSkills(agentsDir, dryRun);
   }
-  await syncSkillsToProviders(providers, agentsDir, dryRun, !all);
+  syncSkillsToProviders(providers, agentsDir, dryRun, !all);
 }
 
 function recordSyncAudit(
@@ -567,6 +569,99 @@ async function maybeAutoPull(
   }
 }
 
+type SyncOpts = {
+  dryRun: boolean;
+  mcpOnly: boolean;
+  skillsOnly: boolean;
+  withProxy: boolean;
+  all: boolean;
+  noUpdateSkills: boolean;
+  ci: boolean;
+  force: boolean;
+  skipAutoPull: boolean;
+};
+
+function parseSyncOpts(opts: {
+  dryRun?: boolean;
+  mcpOnly?: boolean;
+  skillsOnly?: boolean;
+  withProxy?: boolean;
+  all?: boolean;
+  updateSkills?: boolean;
+  ci?: boolean;
+  force?: boolean;
+  skipAutoPull?: boolean;
+}): SyncOpts {
+  return {
+    dryRun: opts.dryRun ?? false,
+    mcpOnly: opts.mcpOnly ?? false,
+    skillsOnly: opts.skillsOnly ?? false,
+    withProxy: opts.withProxy ?? false,
+    all: opts.all ?? false,
+    noUpdateSkills: opts.updateSkills === false,
+    ci: opts.ci ?? false,
+    force: opts.force ?? false,
+    skipAutoPull: opts.skipAutoPull ?? false,
+  };
+}
+
+async function runSyncCommand(syncOpts: SyncOpts): Promise<void> {
+  const agentsDir = AGENTS_DIR;
+  const userConfig = loadAgentConfig();
+  await maybeAutoPull(userConfig, agentsDir, syncOpts.dryRun, syncOpts.skipAutoPull);
+
+  if (!existsSync(agentsDir)) {
+    console.error("Run 'vakt init' first");
+    process.exit(1);
+  }
+  console.log();
+  console.log(bold("vakt sync"));
+  console.log(dim(`Source: ${agentsDir}`));
+  if (syncOpts.dryRun) console.log(yellow("DRY RUN — no changes will be made"));
+
+  const mcpConfig = loadMcpConfig();
+  const policy = loadPolicy();
+  checkRegistryPolicy(policy, mcpConfig);
+
+  if (!syncOpts.force && !syncOpts.dryRun) {
+    const gatePassed = await runSafetyGate(agentsDir, mcpConfig, policy, syncOpts);
+    if (!gatePassed) process.exit(1);
+  }
+
+  if (!syncOpts.all && !syncOpts.dryRun) {
+    await promptUnclassifiedResources(agentsDir);
+  }
+
+  const allProviders = loadProviders();
+  const enabledProviders = userConfig.providers
+    .map((id) => allProviders[id])
+    .filter((p): p is Provider => p !== undefined);
+
+  if (!syncOpts.skillsOnly) {
+    const configToSync = syncOpts.all ? mcpConfig : filterGlobal(mcpConfig);
+    const { resolved, allMissing } = await resolveAll(configToSync, userConfig.paths);
+    await syncMcpServers(enabledProviders, resolved, allMissing, syncOpts.withProxy, syncOpts.dryRun);
+  }
+
+  if (!syncOpts.mcpOnly) {
+    syncInstructionsToProviders(enabledProviders, agentsDir, syncOpts.dryRun);
+  }
+
+  syncPermissions(enabledProviders, policy, syncOpts.dryRun);
+
+  if (!syncOpts.mcpOnly) {
+    await syncSkillPhase(enabledProviders, agentsDir, syncOpts.dryRun, syncOpts.all, syncOpts.noUpdateSkills);
+  }
+
+  recordSyncAudit(enabledProviders, mcpConfig, syncOpts.dryRun);
+
+  console.log();
+  console.log(bold("── Summary ─────────────────────────────────────────────────"));
+  if (syncOpts.dryRun) console.log(`  ${yellow("Dry run complete — no changes made.")}`);
+  else console.log(`  ${green("Sync complete.")}`);
+  console.log();
+}
+
 export function registerSync(program: Command): void {
   program
     .command("sync")
@@ -580,74 +675,7 @@ export function registerSync(program: Command): void {
     .option("--ci", "Non-interactive: gate errors block sync (exit 1), warnings pass")
     .option("--force", "Skip pre-sync safety gate entirely")
     .option("--skip-auto-pull", "Skip automatic remote config pull (when autoSync is enabled)")
-    .action(async (opts: { dryRun?: boolean; mcpOnly?: boolean; skillsOnly?: boolean; withProxy?: boolean; all?: boolean; updateSkills?: boolean; ci?: boolean; force?: boolean; skipAutoPull?: boolean }) => {
-      const dryRun = opts.dryRun ?? false;
-      const mcpOnly = opts.mcpOnly ?? false;
-      const skillsOnly = opts.skillsOnly ?? false;
-      const withProxy = opts.withProxy ?? false;
-      const all = opts.all ?? false;
-      const noUpdateSkills = opts.updateSkills === false;
-      const ci = opts.ci ?? false;
-      const force = opts.force ?? false;
-      const skipAutoPull = opts.skipAutoPull ?? false;
-
-      const agentsDir = AGENTS_DIR;
-
-      const userConfig = loadAgentConfig();
-      await maybeAutoPull(userConfig, agentsDir, dryRun, skipAutoPull);
-
-      if (!existsSync(agentsDir)) {
-        console.error("Run 'vakt init' first");
-        process.exit(1);
-      }
-      console.log();
-      console.log(bold("vakt sync"));
-      console.log(dim(`Source: ${agentsDir}`));
-      if (dryRun) console.log(yellow("DRY RUN — no changes will be made"));
-
-      const mcpConfig = loadMcpConfig();
-      const policy = loadPolicy();
-      checkRegistryPolicy(policy, mcpConfig);
-
-      // ── Pre-sync safety gate ──────────────────────────────────────────────
-      if (!force && !dryRun) {
-        const ok_ = await runSafetyGate(agentsDir, mcpConfig, policy, { mcpOnly, skillsOnly, ci });
-        if (!ok_) process.exit(1);
-      }
-
-      // Prompt for unclassified resources (only when not --all and not --dry-run)
-      if (!all && !dryRun) {
-        await promptUnclassifiedResources(agentsDir);
-      }
-
-      const allProviders = loadProviders();
-
-      const enabledProviders = userConfig.providers
-        .map(id => allProviders[id])
-        .filter((p): p is Provider => p !== undefined);
-
-      if (!skillsOnly) {
-        const configToSync = all ? mcpConfig : filterGlobal(mcpConfig);
-        const { resolved, allMissing } = await resolveAll(configToSync, userConfig.paths);
-        await syncMcpServers(enabledProviders, resolved, allMissing, withProxy, dryRun);
-      }
-
-      if (!mcpOnly) {
-        await syncInstructionsToProviders(enabledProviders, agentsDir, dryRun);
-      }
-
-      syncPermissions(enabledProviders, policy, dryRun);
-
-      if (!mcpOnly) {
-        await syncSkillPhase(enabledProviders, agentsDir, dryRun, all, noUpdateSkills);
-      }
-
-      recordSyncAudit(enabledProviders, mcpConfig, dryRun);
-
-      console.log();
-      console.log(bold("── Summary ─────────────────────────────────────────────────"));
-      if (dryRun) console.log(`  ${yellow("Dry run complete — no changes made.")}`);
-      else console.log(`  ${green("Sync complete.")}`);
-      console.log();
+    .action(async (opts) => {
+      await runSyncCommand(parseSyncOpts(opts));
     });
 }

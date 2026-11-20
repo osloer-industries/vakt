@@ -46,10 +46,10 @@ export function registerProxy(program: Command): void {
       // Close server stdin on EOF so the server exits cleanly and flushes its stdout
       process.stdin.on("data", (data: Buffer) => {
         const { forward, denied } = proxy.interceptRequest(data);
-        denied.forEach(d => process.stdout.write(d));
-        if (forward.length > 0) procStdin.write(forward);
+        denied.forEach((d) => process.stdout.write(d));
+        if (forward.length > 0) void procStdin.write(forward);
       });
-      process.stdin.on("end", () => procStdin.end());
+      process.stdin.on("end", () => { void procStdin.end(); });
 
       // Server stdout → audit recording → agent stdout
       // Awaited before exit so interceptResponse runs for every response before the process ends

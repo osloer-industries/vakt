@@ -4,7 +4,7 @@ import { homedir } from "node:os";
 
 /** Strip control characters for safe terminal/log output (log injection). */
 export function sanitizeForLog(value: string): string {
-  return value.replace(/[\x00-\x1f\x7f]/g, "?");
+  return value.replace(/\p{Cc}/gu, "?");
 }
 
 function rejectParentPathSegments(userPath: string): void {

@@ -123,7 +123,7 @@ export function registerAgent(program: Command): void {
   agent
     .command("status <session-id>")
     .description("Show status of a session")
-    .action(async (sessionId: string) => {
+    .action((sessionId: string) => {
       const store = new AuditStore(defaultAuditDbPath());
       store.init();
       const session = store.getSession(sessionId);
@@ -154,7 +154,7 @@ export function registerAgent(program: Command): void {
     .command("list")
     .description("List all sessions")
     .option("--status <status>", "Filter by status (running|closed)")
-    .action(async (opts) => {
+    .action((opts) => {
       const store = new AuditStore(defaultAuditDbPath());
       store.init();
       const sessions = store.listSessions({ status: opts.status });

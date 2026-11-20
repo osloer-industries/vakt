@@ -26,7 +26,7 @@ export class ProcessManager {
     return { ...this.statuses };
   }
 
-  async start(name: string): Promise<void> {
+  start(name: string): void {
     const server = requireStdioServer(name, this.mcpConfig[name]);
 
     const prior = this.statuses[name] ?? { status: "stopped" as const, restarts: 0 };
@@ -50,21 +50,21 @@ export class ProcessManager {
       const status = this.statuses[name];
       if (code !== 0 && status?.status === "running") {
         this.statuses[name] = { ...status, status: "crashed", restarts: status.restarts + 1 };
-        setTimeout(() => { void this.start(name).catch(console.error); }, 2_000);
+        setTimeout(() => { this.start(name); }, 2_000);
       }
     });
   }
 
-  async stop(name: string): Promise<void> {
+  stop(name: string): void {
     this.procs[name]?.kill();
     delete this.procs[name];
     const status = this.statuses[name];
     if (status) this.statuses[name] = { ...status, status: "stopped" };
   }
 
-  async restart(name: string): Promise<void> {
-    await this.stop(name);
-    await this.start(name);
+  restart(name: string): void {
+    this.stop(name);
+    this.start(name);
   }
 
   getProcess(name: string) { return this.procs[name] ?? null; }

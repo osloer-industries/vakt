@@ -1,4 +1,4 @@
-import { describe, it, expect, mock, beforeEach, afterAll } from "bun:test";
+import { describe, it, expect, beforeEach, afterAll } from "bun:test";
 import type { SandboxHandle } from "../sandbox";
 import { expectAt } from "../test-assert";
 
@@ -20,11 +20,17 @@ function dequeueMockResponse(): Response {
   return new Response(JSON.stringify(resp.body), { status });
 }
 
-const queuedMockFetch: typeof fetch = () => Promise.resolve(dequeueMockResponse());
+type TestFetch = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+
+function asFetch(impl: TestFetch): typeof fetch {
+  return Object.assign(impl, { preconnect: globalThis.fetch.preconnect.bind(globalThis.fetch) });
+}
+
+const queuedMockFetch: TestFetch = () => Promise.resolve(dequeueMockResponse());
 
 beforeEach(() => {
   mockResponses.length = 0;
-  globalThis.fetch = mock(queuedMockFetch);
+  globalThis.fetch = asFetch(queuedMockFetch);
 });
 
 afterAll(() => { globalThis.fetch = originalFetch; });
@@ -64,7 +70,7 @@ describe("DockerSandboxProvider", () => {
     new DataView(frame.buffer).setUint32(4, 5, false);
     frame.set(new TextEncoder().encode("hello"), 8);
 
-    const execMockFetch: typeof fetch = (input) => {
+    const execMockFetch: TestFetch = (input) => {
       const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
       if (url.includes("/exec/") && url.includes("/start")) {
         return Promise.resolve(new Response(frame.buffer));
@@ -74,7 +80,7 @@ describe("DockerSandboxProvider", () => {
       }
       return Promise.resolve(new Response(JSON.stringify({ Id: "c0ffee9abc123" }), { status: 200 }));
     };
-    globalThis.fetch = mock(execMockFetch);
+    globalThis.fetch = asFetch(execMockFetch);
 
     const result = await provider.exec(handle, ["echo", "hello"]);
     expect(result.stdout).toBe("hello");

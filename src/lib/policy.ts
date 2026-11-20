@@ -36,13 +36,15 @@ export function loadMergedPolicy(agentsDir: string): Policy | null {
   return remote ?? local ?? null;
 }
 
+const POLICY_META_KEY = "_meta";
+
 export function mergePolicies(remote: Policy, local: Policy): Policy {
-  const lockedKeys = new Set(remote._meta?.lockedKeys ?? []);
+  const lockedKeys = new Set(remote[POLICY_META_KEY]?.lockedKeys ?? []);
 
   const merged: Record<string, unknown> = { ...remote };
 
   for (const [key, value] of Object.entries(local)) {
-    if (key === "_meta") continue; // Never override _meta from local
+    if (key === POLICY_META_KEY) continue; // Never override _meta from local
     if (lockedKeys.has(key)) continue; // Locked by remote
 
     if (key === "servers") {
@@ -83,18 +85,24 @@ function mergeServers(
     if (lTools.allow !== undefined || rTools.allow !== undefined) {
       const rAllow = new Set(rTools.allow ?? []);
       const lAllow = new Set(lTools.allow ?? []);
-      mergedTools.allow = [...new Set([...rAllow, ...lAllow])].sort((a, b) => a.localeCompare(b));
+      mergedTools.allow = uniqueSortedStrings([...rAllow, ...lAllow]);
     }
 
     if (lTools.deny !== undefined || rTools.deny !== undefined) {
       const rDeny = new Set(rTools.deny ?? []);
       const lDeny = new Set(lTools.deny ?? []);
-      mergedTools.deny = [...new Set([...rDeny, ...lDeny])].sort((a, b) => a.localeCompare(b));
+      mergedTools.deny = uniqueSortedStrings([...rDeny, ...lDeny]);
     }
 
     merged[name] = { ...remoteCfg, tools: mergedTools };
   }
   return merged;
+}
+
+function uniqueSortedStrings(values: string[]): string[] {
+  const copy = [...new Set(values)];
+  copy.sort((a, b) => a.localeCompare(b));
+  return copy;
 }
 
 /** Convert a simple glob pattern (only * as wildcard) to a RegExp. */
@@ -108,28 +116,74 @@ export interface CheckResult {
   matchedRule?: string;
 }
 
+type ToolRules = NonNullable<PolicyServerRules["tools"]>;
+type PathRules = NonNullable<PolicyServerRules["paths"]>;
+
+function matchToolPattern(patterns: string[] | undefined, toolName: string): string | undefined {
+  return patterns?.find((p) => globToRegex(p).test(toolName));
+}
+
+function matchPathPattern(patterns: string[] | undefined, filePath: string): string | undefined {
+  return patterns?.find((p) => filePath.startsWith(expandHome(p)));
+}
+
+function denyToolHit(
+  tools: ToolRules | undefined,
+  toolName: string,
+  rulePrefix: string,
+): CheckResult | null {
+  if (!tools) return null;
+  const denied = matchToolPattern(tools.deny, toolName);
+  return denied ? { result: "deny", matchedRule: `${rulePrefix}.tools.deny["${denied}"]` } : null;
+}
+
+function allowToolHit(
+  tools: ToolRules | undefined,
+  toolName: string,
+  rulePrefix: string,
+): CheckResult | null {
+  if (!tools) return null;
+  const allowed = matchToolPattern(tools.allow, toolName);
+  return allowed ? { result: "allow", matchedRule: `${rulePrefix}.tools.allow["${allowed}"]` } : null;
+}
+
+function denyPathHit(
+  paths: PathRules | undefined,
+  filePath: string,
+  rulePrefix: string,
+): CheckResult | null {
+  if (!paths) return null;
+  const denied = matchPathPattern(paths.deny, filePath);
+  return denied ? { result: "deny", matchedRule: `${rulePrefix}.paths.deny["${denied}"]` } : null;
+}
+
+function allowPathHit(
+  paths: PathRules | undefined,
+  filePath: string,
+  rulePrefix: string,
+): CheckResult | null {
+  if (!paths) return null;
+  const allowed = matchPathPattern(paths.allow, filePath);
+  return allowed ? { result: "allow", matchedRule: `${rulePrefix}.paths.allow["${allowed}"]` } : null;
+}
+
 export class PolicyEngine {
   constructor(private policy: Policy) {}
 
   checkTool(serverName: string, toolName: string): CheckResult {
     const specific = this.policy.servers?.[serverName];
     const wildcard = this.policy.servers?.["*"];
-
-    if (specific?.tools?.deny) {
-      const matched = specific.tools.deny.find(p => globToRegex(p).test(toolName));
-      if (matched) return { result: "deny", matchedRule: `servers.${serverName}.tools.deny["${matched}"]` };
+    const scoped: Array<[PolicyServerRules | undefined, string]> = [
+      [specific, `servers.${serverName}`],
+      [wildcard, `servers["*"]`],
+    ];
+    for (const [rules, prefix] of scoped) {
+      const hit = denyToolHit(rules?.tools, toolName, prefix);
+      if (hit) return hit;
     }
-    if (wildcard?.tools?.deny) {
-      const matched = wildcard.tools.deny.find(p => globToRegex(p).test(toolName));
-      if (matched) return { result: "deny", matchedRule: `servers["*"].tools.deny["${matched}"]` };
-    }
-    if (specific?.tools?.allow) {
-      const matched = specific.tools.allow.find(p => globToRegex(p).test(toolName));
-      if (matched) return { result: "allow", matchedRule: `servers.${serverName}.tools.allow["${matched}"]` };
-    }
-    if (wildcard?.tools?.allow) {
-      const matched = wildcard.tools.allow.find(p => globToRegex(p).test(toolName));
-      if (matched) return { result: "allow", matchedRule: `servers["*"].tools.allow["${matched}"]` };
+    for (const [rules, prefix] of scoped) {
+      const hit = allowToolHit(rules?.tools, toolName, prefix);
+      if (hit) return hit;
     }
     return { result: this.policy.default, matchedRule: `default["${this.policy.default}"]` };
   }
@@ -137,22 +191,17 @@ export class PolicyEngine {
   checkPath(serverName: string, filePath: string): CheckResult {
     const specific = this.policy.servers?.[serverName];
     const wildcard = this.policy.servers?.["*"];
-
-    if (specific?.paths?.deny) {
-      const matched = specific.paths.deny.find(p => filePath.startsWith(expandHome(p)));
-      if (matched) return { result: "deny", matchedRule: `servers.${serverName}.paths.deny["${matched}"]` };
+    const scoped: Array<[PolicyServerRules | undefined, string]> = [
+      [specific, `servers.${serverName}`],
+      [wildcard, `servers["*"]`],
+    ];
+    for (const [rules, prefix] of scoped) {
+      const hit = denyPathHit(rules?.paths, filePath, prefix);
+      if (hit) return hit;
     }
-    if (wildcard?.paths?.deny) {
-      const matched = wildcard.paths.deny.find(p => filePath.startsWith(expandHome(p)));
-      if (matched) return { result: "deny", matchedRule: `servers["*"].paths.deny["${matched}"]` };
-    }
-    if (specific?.paths?.allow) {
-      const matched = specific.paths.allow.find(p => filePath.startsWith(expandHome(p)));
-      if (matched) return { result: "allow", matchedRule: `servers.${serverName}.paths.allow["${matched}"]` };
-    }
-    if (wildcard?.paths?.allow) {
-      const matched = wildcard.paths.allow.find(p => filePath.startsWith(expandHome(p)));
-      if (matched) return { result: "allow", matchedRule: `servers["*"].paths.allow["${matched}"]` };
+    for (const [rules, prefix] of scoped) {
+      const hit = allowPathHit(rules?.paths, filePath, prefix);
+      if (hit) return hit;
     }
     return { result: this.policy.default, matchedRule: `default["${this.policy.default}"]` };
   }

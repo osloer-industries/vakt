@@ -27,7 +27,7 @@ export function registerRoute(program: Command): void {
       const routerConfig = config.modelRouter;
       
       if (opts.test) {
-        await testRouting(config, opts);
+        testRouting(config, opts);
         return;
       }
       
@@ -136,7 +136,9 @@ export function registerRoute(program: Command): void {
             });
           } catch (err) {
             return new Response(
-              JSON.stringify({ error: `Backend error: ${err}` }),
+              JSON.stringify({
+                error: `Backend error: ${err instanceof Error ? err.message : String(err)}`,
+              }),
               { status: 502, headers: { "Content-Type": "application/json" } }
             );
           }
@@ -150,10 +152,10 @@ export function registerRoute(program: Command): void {
     });
 }
 
-async function testRouting(
+function testRouting(
   config: { modelRouter?: ModelRouter },
   opts: { tokens?: string; tools?: string; hasCode?: boolean; hasMath?: boolean }
-): Promise<void> {
+): void {
   console.log(bold("Testing routing logic...\n"));
   
   const routerConfig = config.modelRouter;

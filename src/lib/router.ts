@@ -19,8 +19,18 @@ export function estimateTokens(messages: unknown[]): number {
   return Math.ceil(JSON.stringify(messages).length / 4);
 }
 
+function latestUserMessage(
+  messages: Array<{ role: string; content: string }>,
+): { role: string; content: string } | undefined {
+  for (let i = messages.length - 1; i >= 0; i -= 1) {
+    const m = messages[i];
+    if (m?.role === "user") return m;
+  }
+  return undefined;
+}
+
 export function detectCode(messages: Array<{ role: string; content: string }>): boolean {
-  const latestUser = [...messages].reverse().find(m => m.role === "user");
+  const latestUser = latestUserMessage(messages);
   if (!latestUser?.content) return false;
   
   const content = latestUser.content;
@@ -33,12 +43,12 @@ export function detectCode(messages: Array<{ role: string; content: string }>): 
 }
 
 export function detectMath(messages: Array<{ role: string; content: string }>): boolean {
-  const latestUser = [...messages].reverse().find(m => m.role === "user");
+  const latestUser = latestUserMessage(messages);
   if (!latestUser?.content) return false;
-  
+
   const content = latestUser.content;
   if (/\$[^$]+\$/.test(content)) return true;
-  if (/[\^\∫\∑\∏\√\∂]/.test(content)) return true;
+  if (/[∫∑∏√∂^]/.test(content)) return true;
   
   return false;
 }
@@ -135,12 +145,17 @@ export function buildSignals(body: unknown): RoutingSignals {
   };
 }
 
+function isChatMessage(m: unknown): m is { role: string; content: string } {
+  return (
+    isRecord(m) &&
+    typeof m.role === "string" &&
+    typeof m.content === "string"
+  );
+}
+
 function extractMessages(body: unknown): Array<{ role: string; content: string }> {
   if (!isRecord(body)) return [];
   const messages = body.messages;
   if (!Array.isArray(messages)) return [];
-  return messages.filter((m): m is { role: string; content: string } => {
-    if (!isRecord(m)) return false;
-    return typeof m.role === "string" && typeof m.content === "string";
-  });
+  return messages.filter(isChatMessage);
 }

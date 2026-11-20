@@ -126,7 +126,7 @@ function writeEnvFile(data: Record<string, string>): void {
   const content = Object.entries(data)
     .map(([k, v]) => `${k}=${Buffer.from(v).toString("base64")}`)
     .join("\n");
-  Bun.write(ENV_FILE, content);
+  void Bun.write(ENV_FILE, content);
   chmodSync(ENV_FILE, 0o600);
 }
 
@@ -221,21 +221,28 @@ export async function resolveSecretRefs(
 ): Promise<{ resolved: string; missing: string[] }> {
   const missing: string[] = [];
   // Match secret:KEY (plain) or secret:vault|op|azure:rest/path (namespaced)
-  const refs = [...value.matchAll(/secret:((?:vault|op|azure):[\w\/\-\.]+|\w+)/g)]
+  const refs = [...value.matchAll(/secret:((?:vault|op|azure):[\w./-]+|\w+)/g)]
     .map((m) => m[1])
     .filter((ref): ref is string => ref !== undefined);
+
+  const resolvedValues = await Promise.all(
+    refs.map(async (ref) => {
+      let val: string | null = null;
+      if (ref.startsWith("vault:")) {
+        val = await vaultGet(ref.slice("vault:".length));
+      } else if (ref.startsWith("op:")) {
+        val = await opGet(ref.slice("op:".length));
+      } else if (ref.startsWith("azure:")) {
+        val = await azureGet(ref.slice("azure:".length));
+      } else {
+        val = await secretsGet(ref);
+      }
+      return { ref, val };
+    }),
+  );
+
   let resolved = value;
-  for (const ref of refs) {
-    let val: string | null = null;
-    if (ref.startsWith("vault:")) {
-      val = await vaultGet(ref.slice("vault:".length));
-    } else if (ref.startsWith("op:")) {
-      val = await opGet(ref.slice("op:".length));
-    } else if (ref.startsWith("azure:")) {
-      val = await azureGet(ref.slice("azure:".length));
-    } else {
-      val = await secretsGet(ref);
-    }
+  for (const { ref, val } of resolvedValues) {
     if (val === null) {
       missing.push(ref);
     } else {

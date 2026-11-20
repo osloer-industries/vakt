@@ -12,27 +12,27 @@ describe("ProcessManager", () => {
     expect(expectDefined(statuses["github"], "github status").status).toBe("stopped");
   });
 
-  it("starts a server and reports pid + running status", async () => {
+  it("starts a server and reports pid + running status", () => {
     const pm = new ProcessManager({ test: { command: "sleep", args: ["30"], global: false } }, {});
-    await pm.start("test");
+    pm.start("test");
     const s = expectDefined(pm.listStatuses()["test"], "test status");
     expect(s.status).toBe("running");
     expect(s.pid).toBeGreaterThan(0);
-    await pm.stop("test");
+    pm.stop("test");
   });
 
-  it("stop brings status back to stopped", async () => {
+  it("stop brings status back to stopped", () => {
     const pm = new ProcessManager({ test: { command: "sleep", args: ["30"], global: false } }, {});
-    await pm.start("test");
-    await pm.stop("test");
+    pm.start("test");
+    pm.stop("test");
     expect(expectDefined(pm.listStatuses()["test"], "test status").status).toBe("stopped");
   });
 
-  it("throws when starting an unknown server", async () => {
+  it("throws when starting an unknown server", () => {
     const pm = new ProcessManager({}, {});
     let threw = false;
     try {
-      await pm.start("nonexistent");
+      pm.start("nonexistent");
     } catch {
       threw = true;
     }
