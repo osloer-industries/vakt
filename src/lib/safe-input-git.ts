@@ -65,3 +65,10 @@ export function assertGitRemoteUrl(url: string): void {
   }
   throw new Error(`Unsupported or invalid git URL: ${url}`);
 }
+
+/** HTTPS git remote validated and rebuilt for subprocess arguments. */
+export function validatedHttpsGitRemote(url: string): string {
+  assertHttpsGitRemote(url);
+  const parsed = new URL(url);
+  return `${parsed.origin}${parsed.pathname}`;
+}

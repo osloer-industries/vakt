@@ -1,7 +1,7 @@
 import { join } from "node:path";
-import { existsSync, chmodSync, readFileSync } from "node:fs";
-import { spawnSync } from "node:child_process";
+import { chmodSync, existsSync, readFileSync } from "node:fs";
 import { AGENTS_DIR } from "./config";
+import { MACOS_KEYCHAIN_AVAILABLE } from "./macos-keychain-probe";
 
 type Backend = "keychain" | "pass" | "env";
 const SERVICE = process.env["AGENTS_SERVICE"] ?? "vakt";
@@ -28,18 +28,10 @@ async function run(cmd: string, args: string[]): Promise<{ stdout: string; ok: b
   }
 }
 
-function keychainAccessible(): boolean {
-  // Test keychain accessibility with a read-only operation that never shows a dialog.
-  // 'security list-keychains' exits 0 and returns paths when the login keychain is reachable.
-  // Use absolute path — /usr/bin/security is always the macOS keychain CLI
-  const result = spawnSync("/usr/bin/security", ["list-keychains"], { encoding: "utf-8", timeout: 2000 });
-  return result.status === 0 && typeof result.stdout === "string" && result.stdout.trim().length > 0;
-}
-
 function detectBackend(): Backend {
   const override = process.env["AGENTS_SECRETS_BACKEND"];
   if (override === "keychain" || override === "pass" || override === "env") return override;
-  if (process.platform === "darwin" && keychainAccessible()) return "keychain";
+  if (MACOS_KEYCHAIN_AVAILABLE) return "keychain";
   if (existsSync("/usr/bin/pass") || existsSync("/usr/local/bin/pass")) return "pass";
   return "env";
 }
@@ -111,21 +103,22 @@ async function passList(): Promise<string[]> {
 function readEnvFile(): Record<string, string> {
   if (!existsSync(ENV_FILE)) return {};
   const lines = readFileSync(ENV_FILE, "utf-8").split("\n");
-  return Object.fromEntries(
-    lines
-      .filter((l) => l.includes("="))
-      .map((l) => {
-        const [k, ...rest] = l.split("=");
-        return [k!.trim(), Buffer.from(rest.join("=").trim(), "base64").toString("utf-8")];
-      })
-  );
+  const pairs: Array<[string, string]> = [];
+  for (const line of lines) {
+    if (!line.includes("=")) continue;
+    const [k, ...rest] = line.split("=");
+    const key = k?.trim();
+    if (key === undefined || key.length === 0) continue;
+    pairs.push([key, Buffer.from(rest.join("=").trim(), "base64").toString("utf-8")]);
+  }
+  return Object.fromEntries(pairs);
 }
 
 function writeEnvFile(data: Record<string, string>): void {
   const content = Object.entries(data)
     .map(([k, v]) => `${k}=${Buffer.from(v).toString("base64")}`)
     .join("\n");
-  Bun.write(ENV_FILE, content);
+  void Bun.write(ENV_FILE, content);
   chmodSync(ENV_FILE, 0o600);
 }
 
@@ -191,9 +184,10 @@ async function opGet(spec: string): Promise<string | null> {
   const parts = spec.split("/");
   if (parts.length < 3) return null;
   const [vault, item, ...fieldParts] = parts;
+  if (vault === undefined || item === undefined) return null;
   const field = fieldParts.join("/");
   const { stdout, ok } = await run("op", [
-    "item", "get", item!, "--vault", vault!, "--fields", field!,
+    "item", "get", item, "--vault", vault, "--fields", field,
   ]);
   return ok ? stdout : null;
 }
@@ -219,19 +213,28 @@ export async function resolveSecretRefs(
 ): Promise<{ resolved: string; missing: string[] }> {
   const missing: string[] = [];
   // Match secret:KEY (plain) or secret:vault|op|azure:rest/path (namespaced)
-  const refs = [...value.matchAll(/secret:((?:vault|op|azure):[\w\/\-\.]+|\w+)/g)].map((m) => m[1]!);
+  const refs = [...value.matchAll(/secret:((?:vault|op|azure):[\w./-]+|\w+)/g)]
+    .map((m) => m[1])
+    .filter((ref): ref is string => ref !== undefined);
+
+  const resolvedValues = await Promise.all(
+    refs.map(async (ref) => {
+      let val: string | null = null;
+      if (ref.startsWith("vault:")) {
+        val = await vaultGet(ref.slice("vault:".length));
+      } else if (ref.startsWith("op:")) {
+        val = await opGet(ref.slice("op:".length));
+      } else if (ref.startsWith("azure:")) {
+        val = await azureGet(ref.slice("azure:".length));
+      } else {
+        val = await secretsGet(ref);
+      }
+      return { ref, val };
+    }),
+  );
+
   let resolved = value;
-  for (const ref of refs) {
-    let val: string | null = null;
-    if (ref.startsWith("vault:")) {
-      val = await vaultGet(ref.slice("vault:".length));
-    } else if (ref.startsWith("op:")) {
-      val = await opGet(ref.slice("op:".length));
-    } else if (ref.startsWith("azure:")) {
-      val = await azureGet(ref.slice("azure:".length));
-    } else {
-      val = await secretsGet(ref);
-    }
+  for (const { ref, val } of resolvedValues) {
     if (val === null) {
       missing.push(ref);
     } else {

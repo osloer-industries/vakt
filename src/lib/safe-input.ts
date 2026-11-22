@@ -1,10 +1,11 @@
-import { existsSync, readFileSync, realpathSync, statSync } from "node:fs";
-import { basename, resolve } from "node:path";
+import { existsSync, mkdirSync, readFileSync, realpathSync, statSync } from "node:fs";
+import { basename, dirname, join, relative, resolve, sep } from "node:path";
 import { homedir } from "node:os";
+import { AGENTS_DIR } from "./config";
 
 /** Strip control characters for safe terminal/log output (log injection). */
 export function sanitizeForLog(value: string): string {
-  return value.replace(/[\x00-\x1f\x7f]/g, "?");
+  return value.replace(/\p{Cc}/gu, "?");
 }
 
 function rejectParentPathSegments(userPath: string): void {
@@ -24,8 +25,31 @@ export function assertSafePath(p: string): void {
 }
 
 function rootPrefix(root: string): string {
-  const real = realpathSync.native(resolve(root));
+  const resolved = resolve(root);
+  const real = existsSync(resolved) ? realpathSync.native(resolved) : resolved;
   return real.endsWith("/") ? real : `${real}/`;
+}
+
+/** Prefix check on resolved paths without following directory symlinks away from allowed roots. */
+function ensureUnderAllowedRootsLogical(logicalPath: string, allowedRoots: readonly string[]): string {
+  const abs = resolve(logicalPath);
+  assertSafePath(abs);
+  for (const root of allowedRoots) {
+    const resolvedRoot = resolve(root);
+    const logicalPrefix = resolvedRoot.endsWith(sep) ? resolvedRoot : `${resolvedRoot}${sep}`;
+    if (abs === resolvedRoot || abs.startsWith(logicalPrefix)) {
+      return abs;
+    }
+    if (existsSync(resolvedRoot) && existsSync(abs)) {
+      const realPrefix = rootPrefix(root);
+      const realBase = realPrefix.slice(0, -1);
+      const real = realpathSync.native(abs);
+      if (real === realBase || real.startsWith(realPrefix)) {
+        return abs;
+      }
+    }
+  }
+  throw new Error("Path is outside allowed directories");
 }
 
 /** Ensure a resolved path stays within one of the allowed directory roots. */
@@ -94,6 +118,67 @@ export function readBoundedUtf8File(userPath: string, allowedRoots: readonly str
   return readFileSync(resolveReadableFile(userPath, allowedRoots), "utf-8");
 }
 
+function assertSafePathSegment(segment: string): void {
+  if (!/^[\w.@+ -]+$/.test(segment) || segment === "." || segment === "..") {
+    throw new Error("Invalid path segment");
+  }
+}
+
+/**
+ * Resolve a writable file path under allowed roots, creating safe intermediate directories as needed.
+ */
+export function resolveWritableFileUnderRoots(userPath: string, allowedRoots: readonly string[]): string {
+  if (!userPath || userPath.includes("\0")) {
+    throw new Error("Invalid file path");
+  }
+  rejectParentPathSegments(userPath);
+  const abs = resolve(userPath);
+  assertSafePath(abs);
+  const fileName = basename(abs);
+  if (!fileName || fileName === "." || fileName === "..") {
+    throw new Error("Invalid file path");
+  }
+  assertSafePathSegment(fileName);
+
+  let probe = dirname(abs);
+  let boundedDir: string | undefined;
+  const parentDir = dirname(abs);
+  while (boundedDir === undefined) {
+    if (existsSync(probe)) {
+      boundedDir = ensureUnderAllowedRootsLogical(resolve(probe), allowedRoots);
+      break;
+    }
+    const parent = dirname(probe);
+    if (parent === probe) {
+      throw new Error("Path is outside allowed directories");
+    }
+    probe = parent;
+  }
+
+  const relParts = relative(boundedDir, parentDir).split(sep).filter((part) => part.length > 0 && part !== "..");
+  for (const part of relParts) {
+    assertSafePathSegment(part);
+  }
+
+  let cur = boundedDir;
+  for (const part of relParts) {
+    cur = join(cur, part);
+    assertSafePath(cur);
+    if (!existsSync(cur)) {
+      mkdirSync(cur);
+    }
+  }
+
+  const target = join(cur, fileName);
+  assertSafePath(target);
+  return target;
+}
+
+/** Resolve a writable file under default vakt path roots ({@link userPathRoots}). */
+export function resolveBoundedWritableFile(userPath: string): string {
+  return resolveWritableFileUnderRoots(userPath, userPathRoots(AGENTS_DIR));
+}
+
 /** Resolve a user-supplied path to an absolute, existing directory under allowed roots. */
 export function resolveLocalDirectory(userPath: string, allowedRoots: readonly string[]): string {
   if (!userPath || userPath.includes("\0")) {
@@ -124,7 +209,7 @@ export function assertSafeSkillName(name: string): string {
   return base;
 }
 
-export { assertGitRemoteUrl } from "./safe-input-git";
+export { assertGitRemoteUrl, validatedHttpsGitRemote } from "./safe-input-git";
 export {
   assertDockerImageRef,
   assertOciReference,
@@ -157,7 +242,8 @@ export function validateDockerApiPath(path: string): void {
   const pathname = path.split("?")[0] ?? path;
   const segments = pathname.split("/").filter(Boolean);
   for (let i = 0; i < segments.length; i++) {
-    const seg = segments[i]!;
+    const seg = segments[i];
+    if (seg === undefined) continue;
     const parent = segments[i - 1];
     if (parent === "containers" && !DOCKER_PATH_LITERALS.has(seg)) {
       assertDockerResourceId(seg);
