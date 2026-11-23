@@ -2,8 +2,9 @@ import { existsSync, readFileSync, writeFileSync, mkdirSync, unlinkSync } from "
 import { dirname, join } from "node:path";
 import { expandHome, loadProviders } from "./config";
 import { resolveProviderInstructionsPath } from "./instructions";
-import type { Policy, ToolPermission } from "./schemas";
+import { HookConfigSchema, type HookConfig, type Policy, type ToolPermission } from "./schemas";
 import { serializeToolPermission } from "./permissions";
+import { parseJsonUnknown } from "./type-guards";
 
 const VAKT_MARKER_START = "<!-- BEGIN_VAKT_MANAGED -->";
 const VAKT_MARKER_END = "<!-- END_VAKT_MANAGED -->";
@@ -276,12 +277,12 @@ HOOK_EOF
 `;
 }
 
-interface HookConfig {
-  hooks?: Array<{
-    name: string;
-    command: string;
-    events: string[];
-  }>;
+function readHookConfig(text: string): HookConfig {
+  try {
+    return HookConfigSchema.parse(parseJsonUnknown(text));
+  } catch {
+    return {};
+  }
 }
 
 function updateHookConfig(configPath: string, hookName: string, hookCommand: string, dryRun: boolean): void {
@@ -289,11 +290,7 @@ function updateHookConfig(configPath: string, hookName: string, hookCommand: str
   
   let config: HookConfig = {};
   if (existsSync(configPath)) {
-    try {
-      config = JSON.parse(readFileSync(configPath, "utf-8")) as HookConfig;
-    } catch {
-      config = {};
-    }
+    config = readHookConfig(readFileSync(configPath, "utf-8"));
   }
   
   const hooks = config.hooks ?? [];
@@ -319,9 +316,9 @@ function updateHookConfig(configPath: string, hookName: string, hookCommand: str
 function removeHookConfig(configPath: string, hookName: string, dryRun: boolean): void {
   if (dryRun || !existsSync(configPath)) return;
   
-  let config: HookConfig = {};
+  let config: HookConfig;
   try {
-    config = JSON.parse(readFileSync(configPath, "utf-8")) as HookConfig;
+    config = readHookConfig(readFileSync(configPath, "utf-8"));
   } catch {
     return;
   }

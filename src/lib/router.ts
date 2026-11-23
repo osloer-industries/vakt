@@ -1,4 +1,5 @@
 import type { ModelRouter } from "./schemas";
+import { isRecord } from "./type-guards";
 
 export interface RoutingSignals {
   promptTokens: number;
@@ -18,8 +19,18 @@ export function estimateTokens(messages: unknown[]): number {
   return Math.ceil(JSON.stringify(messages).length / 4);
 }
 
+function latestUserMessage(
+  messages: Array<{ role: string; content: string }>,
+): { role: string; content: string } | undefined {
+  for (let i = messages.length - 1; i >= 0; i -= 1) {
+    const m = messages[i];
+    if (m?.role === "user") return m;
+  }
+  return undefined;
+}
+
 export function detectCode(messages: Array<{ role: string; content: string }>): boolean {
-  const latestUser = [...messages].reverse().find(m => m.role === "user");
+  const latestUser = latestUserMessage(messages);
   if (!latestUser?.content) return false;
   
   const content = latestUser.content;
@@ -32,19 +43,19 @@ export function detectCode(messages: Array<{ role: string; content: string }>): 
 }
 
 export function detectMath(messages: Array<{ role: string; content: string }>): boolean {
-  const latestUser = [...messages].reverse().find(m => m.role === "user");
+  const latestUser = latestUserMessage(messages);
   if (!latestUser?.content) return false;
-  
+
   const content = latestUser.content;
   if (/\$[^$]+\$/.test(content)) return true;
-  if (/[\^\∫\∑\∏\√\∂]/.test(content)) return true;
+  if (/[∫∑∏√∂^]/.test(content)) return true;
   
   return false;
 }
 
 export function extractToolCount(body: unknown): number {
-  if (typeof body !== "object" || body === null) return 0;
-  const tools = (body as Record<string, unknown>).tools;
+  if (!isRecord(body)) return 0;
+  const tools = body.tools;
   if (Array.isArray(tools)) return tools.length;
   return 0;
 }
@@ -57,6 +68,22 @@ interface RoutingRule {
     hasMath?: boolean;
   };
   use: string | string[];
+}
+
+type ConfigRoutingRule = NonNullable<NonNullable<ModelRouter>["rules"]>[number];
+
+function normalizeRoutingRule(rule: ConfigRoutingRule): RoutingRule {
+  const ifBlock = rule.if;
+  const normalizedIf = ifBlock === undefined ? undefined : {
+    ...(ifBlock.promptTokens === undefined ? {} : { promptTokens: ifBlock.promptTokens }),
+    ...(ifBlock.toolCount === undefined ? {} : { toolCount: ifBlock.toolCount }),
+    ...(ifBlock.hasCode === undefined ? {} : { hasCode: ifBlock.hasCode }),
+    ...(ifBlock.hasMath === undefined ? {} : { hasMath: ifBlock.hasMath }),
+  };
+  return {
+    use: rule.use,
+    ...(normalizedIf === undefined ? {} : { if: normalizedIf }),
+  };
 }
 
 function getFirstBackend(use: string | string[]): string | null {
@@ -107,7 +134,7 @@ export function selectBackend(
     const rule = rules[i];
     if (!rule) continue;
     
-    if (checkRuleCondition(rule, signals)) {
+    if (checkRuleCondition(normalizeRoutingRule(rule), signals)) {
       return {
         backend: getFirstBackend(rule.use),
         signals,
@@ -134,18 +161,17 @@ export function buildSignals(body: unknown): RoutingSignals {
   };
 }
 
+function isChatMessage(m: unknown): m is { role: string; content: string } {
+  return (
+    isRecord(m) &&
+    typeof m.role === "string" &&
+    typeof m.content === "string"
+  );
+}
+
 function extractMessages(body: unknown): Array<{ role: string; content: string }> {
-  if (typeof body !== "object" || body === null) return [];
-  const messages = (body as Record<string, unknown>).messages;
-  if (Array.isArray(messages)) {
-    return messages.filter((m): m is { role: string; content: string } => 
-      typeof m === "object" && 
-      m !== null &&
-      "role" in m && 
-      "content" in m &&
-      typeof (m as Record<string, unknown>).role === "string" &&
-      typeof (m as Record<string, unknown>).content === "string"
-    );
-  }
-  return [];
+  if (!isRecord(body)) return [];
+  const messages = body.messages;
+  if (!Array.isArray(messages)) return [];
+  return messages.filter(isChatMessage);
 }

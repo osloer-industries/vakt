@@ -3,6 +3,8 @@ import type {
 } from "../sandbox";
 import { assertDockerImageRef, assertDockerResourceId } from "../safe-input";
 import { buildDockerExecStartPath, rebuildDockerApiPath } from "../docker-api-path";
+import { bunFetch, DOCKER_ENGINE_API } from "../bun-fetch";
+import { parseDockerContainerList, parseDockerExecExit, parseDockerIdBody } from "../docker-json";
 
 interface DockerOpts {
   socket?: string;
@@ -40,38 +42,34 @@ export class DockerSandboxProvider implements SandboxProvider {
   constructor(opts: DockerOpts = {}) {
     this.socket         = opts.socket  ?? "/var/run/docker.sock";
     this.defaultImage   = opts.image   ?? "node:20-slim";
-    this.memory         = opts.memory;
-    this.cpus           = opts.cpus;
+    if (opts.memory !== undefined) this.memory = opts.memory;
+    if (opts.cpus !== undefined) this.cpus = opts.cpus;
     this.defaultNetwork = opts.network ?? "none";
   }
-
-  private static readonly DOCKER_ENGINE = "http://127.0.0.1/v1.41";
 
   private async dockerFetch(path: string, init: RequestInit): Promise<Response> {
     const safePath = rebuildDockerApiPath(path);
     if (!/^\/[a-z0-9/?.=&_%-]+$/i.test(safePath)) {
       throw new Error("Refusing unsafe Docker API path");
     }
-    return fetch(DockerSandboxProvider.DOCKER_ENGINE + safePath, {
+    return bunFetch(DOCKER_ENGINE_API + safePath, {
       ...init,
       redirect: "error",
-      // @ts-ignore — Bun extension: unix socket fetch
       unix: this.socket,
     });
   }
 
-  private async req<T>(method: string, path: string, body?: unknown): Promise<T> {
-    const res = await this.dockerFetch(path, {
-      method,
-      headers: body ? { "Content-Type": "application/json" } : undefined,
-      body: body ? JSON.stringify(body) : undefined,
-    });
+  private async req(method: string, path: string, body?: unknown): Promise<unknown> {
+    const init: RequestInit = body === undefined
+      ? { method }
+      : { method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) };
+    const res = await this.dockerFetch(path, init);
     if (!res.ok && res.status !== 204) {
       const text = await res.text().catch(() => "");
       throw new Error(`Docker API ${method} ${path} → ${res.status}: ${text}`);
     }
-    if (res.status === 204) return {} as T;
-    return res.json() as Promise<T>;
+    if (res.status === 204) return {};
+    return res.json();
   }
 
   private async pullImage(image: string): Promise<void> {
@@ -107,7 +105,8 @@ export class DockerSandboxProvider implements SandboxProvider {
     };
     if (opts.name) body["Name"] = opts.name;
 
-    const { Id } = await this.req<{ Id: string }>("POST", "/containers/create", body);
+    const createBody = await this.req("POST", "/containers/create", body);
+    const Id = parseDockerIdBody(createBody);
     assertDockerResourceId(Id);
     await this.req("POST", `/containers/${Id}/start`);
     // Ensure /workspace always exists (may be empty if no repo bind-mounted)
@@ -117,7 +116,7 @@ export class DockerSandboxProvider implements SandboxProvider {
   }
 
   async exec(handle: SandboxHandle, cmd: string[], env?: Record<string, string>): Promise<ExecResult> {
-    const { Id: execId } = await this.req<{ Id: string }>(
+    const execCreate = await this.req(
       "POST",
       `/containers/${handle.id}/exec`,
       {
@@ -127,6 +126,7 @@ export class DockerSandboxProvider implements SandboxProvider {
         AttachStderr: true,
       },
     );
+    const execId = parseDockerIdBody(execCreate);
 
     const execPath = buildDockerExecStartPath(execId);
     const res = await this.dockerFetch(execPath, {
@@ -143,8 +143,9 @@ export class DockerSandboxProvider implements SandboxProvider {
     const buf = await res.arrayBuffer();
     const { stdout, stderr } = parseMuxStream(buf);
 
-    const inspect = await this.req<{ ExitCode: number }>("GET", `/exec/${execId}/json`);
-    return { stdout, stderr, exitCode: inspect.ExitCode };
+    const inspect = await this.req("GET", `/exec/${execId}/json`);
+    const exitCode = parseDockerExecExit(inspect);
+    return { stdout, stderr, exitCode };
   }
 
   async writeFile(handle: SandboxHandle, path: string, content: string): Promise<void> {
@@ -173,9 +174,10 @@ export class DockerSandboxProvider implements SandboxProvider {
       }
     }
     const filtersParam = encodeURIComponent(JSON.stringify({ label: labelFilters }));
-    const containers = await this.req<Array<{ Id: string; Labels: Record<string, string> }>>(
+    const listBody = await this.req(
       "GET", `/containers/json?filters=${filtersParam}`,
     );
+    const containers = parseDockerContainerList(listBody);
     return containers
       .filter(c => !filter.namePrefix || (c.Labels["vakt.name"] ?? "").startsWith(filter.namePrefix))
       .map(c => ({ id: c.Id, provider: this.name }));
@@ -191,7 +193,9 @@ export class DockerSandboxProvider implements SandboxProvider {
 function parseMem(mem: string): number {
   const m = /^(\d+(?:\.\d+)?)([mgk])?$/i.exec(mem);
   if (!m) throw new Error(`Invalid memory spec: ${mem}`);
-  const n = Number.parseFloat(m[1]!);
+  const digits = m[1];
+  if (digits === undefined) throw new Error(`Invalid memory spec: ${mem}`);
+  const n = Number.parseFloat(digits);
   switch (m[2]?.toLowerCase()) {
     case "g": return Math.round(n * 1024 * 1024 * 1024);
     case "m": return Math.round(n * 1024 * 1024);

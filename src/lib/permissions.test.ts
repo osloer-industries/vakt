@@ -1,20 +1,33 @@
 import { describe, it, expect, beforeEach, afterEach } from "bun:test";
-import { mkdirSync, readFileSync, writeFileSync, rmSync, existsSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, existsSync } from "node:fs";
 import { join } from "node:path";
-import { tmpdir } from "node:os";
+import { homedir } from "node:os";
+import { writeUtf8FileAtomic } from "./atomic-write";
 import { ClaudeSettingsAdapter, serializeToolPermission } from "./permissions";
 import type { ToolPermission } from "./schemas";
+import { isRecord, parseJsonUnknown, readStringArray } from "./type-guards";
+import { expectDefined } from "./test-assert";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function tempDir(): string {
-  const dir = join(tmpdir(), `vakt-perm-test-${Math.random().toString(36).slice(2)}`);
-  mkdirSync(dir, { recursive: true });
-  return dir;
+  return mkdtempSync(join(homedir(), "vakt-perm-test-"));
 }
 
-function readJson(path: string): Record<string, unknown> {
-  return JSON.parse(readFileSync(path, "utf-8")) as Record<string, unknown>;
+function readSettingsJson(path: string): Record<string, unknown> {
+  const parsed = parseJsonUnknown(readFileSync(path, "utf-8"));
+  return isRecord(parsed) ? parsed : {};
+}
+
+function readPermissions(settings: Record<string, unknown>): { allow?: string[]; deny?: string[] } | undefined {
+  const permissions = settings["permissions"];
+  if (!isRecord(permissions)) return undefined;
+  const allow = readStringArray(permissions, "allow");
+  const deny = readStringArray(permissions, "deny");
+  return {
+    ...(allow === undefined ? {} : { allow }),
+    ...(deny === undefined ? {} : { deny }),
+  };
 }
 
 // ── serializeToolPermission ───────────────────────────────────────────────────
@@ -66,13 +79,11 @@ describe("ClaudeSettingsAdapter", () => {
     expect(result.written).toBe(true);
     expect(existsSync(settingsPath)).toBe(true);
 
-    const settings = readJson(settingsPath) as {
-      permissions?: { allow?: string[]; deny?: string[] };
-      _vakt_managed?: { allow: string[]; deny: string[] };
-    };
-    expect(settings.permissions?.allow).toEqual(["Read", "Bash(git *)"]);
-    expect(settings.permissions?.deny).toEqual(["WebSearch"]);
-    expect(settings._vakt_managed).toEqual({ allow: ["Read", "Bash(git *)"], deny: ["WebSearch"] });
+    const settings = readSettingsJson(settingsPath);
+    const permissions = readPermissions(settings);
+    expect(permissions?.allow).toEqual(["Read", "Bash(git *)"]);
+    expect(permissions?.deny).toEqual(["WebSearch"]);
+    expect(settings["_vakt_managed"]).toEqual({ allow: ["Read", "Bash(git *)"], deny: ["WebSearch"] });
   });
 
   it("returns written: false in dry-run mode and does not touch the file", () => {
@@ -87,7 +98,7 @@ describe("ClaudeSettingsAdapter", () => {
 
   it("preserves user-managed entries on second sync", () => {
     // Write initial user-managed entries
-    writeFileSync(
+    writeUtf8FileAtomic(
       settingsPath,
       JSON.stringify({
         permissions: {
@@ -100,15 +111,13 @@ describe("ClaudeSettingsAdapter", () => {
     const adapter = new ClaudeSettingsAdapter(settingsPath);
     adapter.apply(allow, deny, false);
 
-    const settings = readJson(settingsPath) as {
-      permissions?: { allow?: string[]; deny?: string[] };
-    };
+    const permissions = readPermissions(readSettingsJson(settingsPath));
     // User entries appear first, vakt entries appended
-    expect(settings.permissions?.allow).toContain("Edit(/src/**)");
-    expect(settings.permissions?.allow).toContain("Read");
-    expect(settings.permissions?.allow).toContain("Bash(git *)");
-    expect(settings.permissions?.deny).toContain("Write(//etc/**)");
-    expect(settings.permissions?.deny).toContain("WebSearch");
+    expect(permissions?.allow).toContain("Edit(/src/**)");
+    expect(permissions?.allow).toContain("Read");
+    expect(permissions?.allow).toContain("Bash(git *)");
+    expect(permissions?.deny).toContain("Write(//etc/**)");
+    expect(permissions?.deny).toContain("WebSearch");
   });
 
   it("replaces vakt-managed entries on repeat sync without duplicating", () => {
@@ -118,13 +127,11 @@ describe("ClaudeSettingsAdapter", () => {
     // Second sync with same policy
     adapter.apply(allow, deny, false);
 
-    const settings = readJson(settingsPath) as {
-      permissions?: { allow?: string[]; deny?: string[] };
-    };
+    const permissions = readPermissions(readSettingsJson(settingsPath));
     // No duplicates
-    expect(settings.permissions?.allow?.filter(e => e === "Read").length).toBe(1);
-    expect(settings.permissions?.allow?.filter(e => e === "Bash(git *)").length).toBe(1);
-    expect(settings.permissions?.deny?.filter(e => e === "WebSearch").length).toBe(1);
+    expect(permissions?.allow?.filter((e) => e === "Read").length).toBe(1);
+    expect(permissions?.allow?.filter((e) => e === "Bash(git *)").length).toBe(1);
+    expect(permissions?.deny?.filter((e) => e === "WebSearch").length).toBe(1);
   });
 
   it("idempotent: two syncs with same policy produce identical files", () => {
@@ -142,14 +149,12 @@ describe("ClaudeSettingsAdapter", () => {
     // Clear policy
     adapter.apply([], [], false);
 
-    const settings = readJson(settingsPath) as {
-      permissions?: { allow?: string[]; deny?: string[] };
-      _vakt_managed?: unknown;
-    };
-    expect(settings.permissions?.allow ?? []).toHaveLength(0);
-    expect(settings.permissions?.deny ?? []).toHaveLength(0);
+    const settings = readSettingsJson(settingsPath);
+    const permissions = readPermissions(settings);
+    expect(permissions?.allow ?? []).toHaveLength(0);
+    expect(permissions?.deny ?? []).toHaveLength(0);
     // Marker is removed when vakt has nothing managed
-    expect(settings._vakt_managed).toBeUndefined();
+    expect(settings["_vakt_managed"]).toBeUndefined();
   });
 
   it("does not clobber user entries added between syncs", () => {
@@ -157,25 +162,26 @@ describe("ClaudeSettingsAdapter", () => {
     adapter.apply(allow, deny, false);
 
     // User manually adds an entry
-    const settings = readJson(settingsPath) as {
-      permissions?: { allow?: string[] };
-    };
-    settings.permissions!.allow!.push("Agent(Explore)");
-    writeFileSync(settingsPath, JSON.stringify(settings, null, 2) + "\n");
+    const settings = readSettingsJson(settingsPath);
+    const permissions = readPermissions(settings);
+    const allowList = expectDefined(permissions?.allow, "permissions.allow");
+    allowList.push("Agent(Explore)");
+    writeUtf8FileAtomic(
+      settingsPath,
+      JSON.stringify({ ...settings, permissions: { ...permissions, allow: allowList } }, null, 2) + "\n",
+    );
 
     // vakt syncs again with same policy
     adapter.apply(allow, deny, false);
 
-    const final = readJson(settingsPath) as {
-      permissions?: { allow?: string[] };
-    };
-    expect(final.permissions?.allow).toContain("Agent(Explore)");
+    const final = readPermissions(readSettingsJson(settingsPath));
+    expect(final?.allow).toContain("Agent(Explore)");
   });
 
   it("emits a warning for unknown tool names", () => {
     const adapter = new ClaudeSettingsAdapter(settingsPath);
     const result = adapter.apply([{ tool: "FutureTool" }], [], false);
-    expect(result.warnings.some(w => w.includes("FutureTool"))).toBe(true);
+    expect(result.warnings.some((w) => w.includes("FutureTool"))).toBe(true);
   });
 
   it("does not emit warnings for known tool names", () => {
@@ -185,11 +191,11 @@ describe("ClaudeSettingsAdapter", () => {
   });
 
   it("handles unparseable existing settings.json gracefully", () => {
-    writeFileSync(settingsPath, "not valid json");
+    writeUtf8FileAtomic(settingsPath, "not valid json");
     const adapter = new ClaudeSettingsAdapter(settingsPath);
     // Should not throw; should warn and treat as empty
     const result = adapter.apply(allow, deny, false);
     expect(result.written).toBe(true);
-    expect(result.warnings.some(w => w.includes("could not parse"))).toBe(true);
+    expect(result.warnings.some((w) => w.includes("could not parse"))).toBe(true);
   });
 });

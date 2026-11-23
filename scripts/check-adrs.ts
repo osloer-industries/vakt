@@ -18,8 +18,8 @@ function fail(file: string, msg: string): void {
 }
 
 const files = readdirSync(ADR_DIR)
-  .filter(f => /^\d{4}-/.test(f) && f.endsWith(".md"))
-  .sort();
+  .filter((f) => /^\d{4}-/.test(f) && f.endsWith(".md"))
+  .toSorted((a, b) => a.localeCompare(b));
 
 if (files.length === 0) {
   process.stderr.write("check-adrs: no ADR files found in docs/adr/\n");
@@ -36,7 +36,11 @@ for (const file of files) {
     continue;
   }
 
-  const fmText = fm[1]!;
+  const fmText = fm[1];
+  if (fmText === undefined) {
+    fail(file, "empty YAML frontmatter block");
+    continue;
+  }
   const status = fmText.match(/^status:\s*(.+)$/m)?.[1]?.trim().toLowerCase();
   const date   = fmText.match(/^date:\s*(.+)$/m)?.[1]?.trim();
 
