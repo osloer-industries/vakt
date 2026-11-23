@@ -2,13 +2,14 @@ import { existsSync, lstatSync, mkdirSync, realpathSync, symlinkSync, unlinkSync
 import { dirname } from "node:path";
 import type { Provider } from "./schemas";
 import { expandHome } from "./config";
+import { currentPlatformKey } from "./type-guards";
 
 export type InstructionsSyncAction = "linked" | "refreshed" | "skipped" | "blocked";
 
 export function resolveProviderInstructionsPath(provider: Provider): string | null {
   const block = provider.instructions;
   if (!block) return null;
-  const platform = process.platform as keyof typeof block.path;
+  const platform = currentPlatformKey();
   const raw = block.path[platform] ?? "";
   if (!raw) return null;
   return expandHome(raw);
