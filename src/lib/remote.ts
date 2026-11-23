@@ -1,6 +1,7 @@
 import { join } from "node:path";
 import { existsSync } from "node:fs";
 import { type RemoteConfig } from "./schemas";
+import { isRecord, parseJsonUnknown } from "./type-guards";
 
 // URL resolution: GitHub, GitLab, local path, plain HTTPS
 export function resolveRemoteUrl(base: string, filename: string): string {
@@ -84,12 +85,15 @@ export async function mergeRemoteMcp(
   const remotePath = join(agentsDir, "mcp-config.remote.json");
   if (!existsSync(remotePath)) return {};
 
-  const remoteRaw = JSON.parse(await Bun.file(remotePath).text()) as Record<string, unknown>;
-  const localRaw = JSON.parse(await Bun.file(localPath).text()) as Record<string, unknown>;
+  const remoteParsed = parseJsonUnknown(await Bun.file(remotePath).text());
+  const localParsed = parseJsonUnknown(await Bun.file(localPath).text());
+  const remoteRaw = isRecord(remoteParsed) ? remoteParsed : {};
+  const localRaw = isRecord(localParsed) ? localParsed : {};
 
   const changes: Record<string, "added" | "updated" | "unchanged"> = {};
   for (const [name, cfg] of Object.entries(remoteRaw)) {
-    const tagged = { ...(cfg as Record<string, unknown>), _source: "remote" };
+    const base = isRecord(cfg) ? cfg : {};
+    const tagged = { ...base, _source: "remote" };
     if (name in localRaw) {
       changes[name] = JSON.stringify(localRaw[name]) === JSON.stringify(tagged) ? "unchanged" : "updated";
     } else {

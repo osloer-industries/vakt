@@ -61,26 +61,41 @@ export default [
       // ── SonarCloud S7744: No useless fallback in spread (e.g. ?? {}) ─────
       "unicorn/no-useless-fallback-in-spread": "error",
 
-      // ── TypeScript hygiene ────────────────────────────────────────────────
-      // warn (not error) so pre-existing `any` in daemon/proxy doesn't block commits
-      "@typescript-eslint/no-explicit-any": "warn",
+      // ── TypeScript escape hatches (org template parity) ───────────────────
+      "@typescript-eslint/no-explicit-any": "error",
+      "@typescript-eslint/ban-ts-comment": [
+        "error",
+        {
+          "ts-expect-error": "allow-with-description",
+          "ts-ignore": true,
+          "ts-nocheck": true,
+          "ts-check": false,
+          "minimumDescriptionLength": 10,
+        },
+      ],
+      "@typescript-eslint/no-non-null-assertion": "error",
+      "@typescript-eslint/consistent-type-assertions": ["error", { assertionStyle: "never" }],
+      "@typescript-eslint/no-unsafe-assignment": "error",
+      "@typescript-eslint/no-unsafe-call": "error",
+      "@typescript-eslint/no-unsafe-member-access": "error",
+      "@typescript-eslint/no-unsafe-return": "error",
+      "@typescript-eslint/no-unsafe-argument": "error",
       "@typescript-eslint/no-unused-vars": ["error", { argsIgnorePattern: "^_" }],
-
-      // ── Bun compiled-binary safety ────────────────────────────────────────
-      // import.meta.dir and import.meta.url → .pathname resolve to /$bunfs/…
-      // paths in a compiled Bun binary and cannot be used to read bundled files
-      // at runtime. Use static `import` for bundled assets instead.
+      // ── Bun compiled-binary safety + double-cast ban ──────────────────────
       "no-restricted-syntax": [
         "error",
         {
-          // import.meta.dir
+          selector: "TSAsExpression > TSAsExpression",
+          message:
+            "Double type assertions (`as unknown as T`) are banned. Parse with Zod or narrow with a type guard.",
+        },
+        {
           selector:
             "MemberExpression[object.type='MetaProperty'][object.meta.name='import'][object.property.name='meta'][property.name='dir']",
           message:
             "import.meta.dir is '/$bunfs/root' in compiled Bun binaries. Use a static import for bundled assets.",
         },
         {
-          // new URL("...", import.meta.url).pathname — file-path-from-source pattern
           selector:
             "MemberExpression[property.name='pathname'][object.type='NewExpression'][object.callee.name='URL'] > NewExpression > MemberExpression[object.type='MetaProperty'][object.meta.name='import'][object.property.name='meta'][property.name='url']",
           message:

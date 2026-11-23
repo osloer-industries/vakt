@@ -17,8 +17,8 @@ export async function initOtel(endpoint?: string): Promise<void> {
     const { OTLPTraceExporter } = await import("@opentelemetry/exporter-trace-otlp-grpc");
 
     const sdk = new NodeSDK({
-      serviceName:   "vakt",
-      traceExporter: new OTLPTraceExporter({ url: endpoint }) as any,
+      serviceName: "vakt",
+      traceExporter: new OTLPTraceExporter({ url: endpoint }),
     });
     sdk.start();
     sdkShutdown = () => sdk.shutdown();
@@ -59,7 +59,10 @@ export function recordToolCallSpan(opts: ToolCallSpanOpts): void {
   });
 
   if (!opts.ok) {
-    span.setStatus({ code: SpanStatusCode.ERROR, message: opts.errorCode });
+    span.setStatus({
+      code: SpanStatusCode.ERROR,
+      ...(opts.errorCode === undefined ? {} : { message: opts.errorCode }),
+    });
   }
   span.end(opts.endedAt);
 }
