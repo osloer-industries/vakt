@@ -60,13 +60,17 @@ export function countSuppressions(rootDir: string): number {
   return total;
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
 export function loadBaseline(baselinePath: string): SuppressionBaseline {
   const parsed: unknown = JSON.parse(readFileSync(baselinePath, "utf8"));
-  if (typeof parsed !== "object" || parsed === null) {
+  if (!isRecord(parsed)) {
     throw new Error("Invalid suppression baseline JSON");
   }
-  const version = Reflect.get(parsed, "version");
-  const total = Reflect.get(parsed, "total");
+  const version = parsed["version"];
+  const total = parsed["total"];
   if (version !== 1 || typeof total !== "number" || !Number.isInteger(total) || total < 0) {
     throw new Error("Invalid suppression baseline shape");
   }

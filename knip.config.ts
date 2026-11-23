@@ -8,7 +8,7 @@ const config: KnipConfig = {
   project: ["src/**/*.ts", "scripts/**/*.ts"],
   ignoreBinaries: [
     "bats",   // system test runner, not a package
-    "eslint", // called in scripts, provided by devDependency eslint
+    "npm",    // installs packages/eslint-sonarjs before SonarJS shift-left lint
     "knip",   // called in scripts, provided by devDependency knip
     "oxlint", // called in scripts, provided by devDependency oxlint
   ],

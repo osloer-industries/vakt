@@ -1,0 +1,32 @@
+{
+  "name": "@osloer-industries/eslint-sonarjs",
+  "version": "1.0.0",
+  "description": "SonarJS ESLint recommended rules for vakt (TypeScript 6 parser; root stays on TypeScript 7).",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "eslint-sonarjs": "run.mjs"
+  },
+  "files": [
+    "eslint.config.mjs",
+    "sonarjs-rules.mjs",
+    "run.mjs",
+    "list-enabled-rules.mjs"
+  ],
+  "engines": {
+    "node": ">=24 <25"
+  },
+  "overrides": {
+    "minimatch": "11.0.8"
+  },
+  "scripts": {
+    "list-rules": "node list-enabled-rules.mjs"
+  },
+  "devDependencies": {
+    "@typescript-eslint/eslint-plugin": "8.72.2",
+    "@typescript-eslint/parser": "8.72.2",
+    "eslint": "10.14.0",
+    "eslint-plugin-sonarjs": "4.2.2",
+    "typescript": "6.0.3"
+  }
+}

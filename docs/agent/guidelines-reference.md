@@ -68,7 +68,7 @@ if (!result.success) {
 ### TypeScript
 
 - `strict: true`, `noUncheckedIndexedAccess: true`, `exactOptionalPropertyTypes: true`
-- No type escape hatches: Oxlint + ESLint block `any`, `@ts-ignore` / `@ts-nocheck` / bare `@ts-expect-error`, non-null `!`, type assertions (`as` / angle brackets), and double casts (`as unknown as`)
+- No type escape hatches: Oxlint (type-aware via oxlint-tsgolint) plus the `packages/eslint-sonarjs` Sonar shift-left pass block `any`, `@ts-ignore` / `@ts-nocheck` / bare `@ts-expect-error`, non-null `!`, type assertions (`as` / angle brackets), and double casts (`as unknown as`)
 - Allowed: `as const`, `satisfies`
 - No `any`; use `unknown` + Zod (or `isRecord` / small type guards at boundaries)
 - Named exports; no default exports except `src/index.ts`

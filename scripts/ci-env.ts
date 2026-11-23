@@ -8,7 +8,7 @@ export const CI_SAFE_PATH =
 
 export type CiExecFileOptions = Pick<
   ExecFileSyncOptions,
-  "stdio" | "env" | "encoding"
+  "stdio" | "env" | "encoding" | "cwd"
 > & {
   /** Extra directories prepended to the pinned PATH (e.g. dir containing `bun`). */
   pathPrefix?: string;

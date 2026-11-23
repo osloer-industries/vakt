@@ -9,16 +9,16 @@ export AGENTS_SECRETS_BACKEND="env"  # never trigger macOS keychain dialogs in h
 # without aborting the script. set +e disables exit-on-error for the whole script.
 set +e
 
-# Lint staged production TypeScript files (sonarjs + @typescript-eslint rules)
+# Lint staged production TypeScript files (oxlint + SonarJS shift-left rules)
 # Only lints files you're actually changing — pre-existing violations in unmodified
-# files don't block commits. Run `bunx eslint src/` to see the full picture.
+# files don't block commits. Run `bun run lint` to see the full picture.
 STAGED_TS=$(git diff --cached --name-only --diff-filter=ACM | grep '^src/.*\.ts$' | grep -v '\.test\.ts$')
 if [ -n "$STAGED_TS" ]; then
   # shellcheck disable=SC2086
   bunx oxlint -c .oxlintrc.json $STAGED_TS
   [ $? -ne 0 ] && exit 1
   # shellcheck disable=SC2086
-  bunx eslint $STAGED_TS
+  node --experimental-strip-types scripts/lint-sonarjs.ts $STAGED_TS
   [ $? -ne 0 ] && exit 1
 fi
 

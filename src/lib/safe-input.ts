@@ -1,7 +1,6 @@
 import { existsSync, mkdirSync, readFileSync, realpathSync, statSync } from "node:fs";
 import { basename, dirname, join, relative, resolve, sep } from "node:path";
 import { homedir } from "node:os";
-import { AGENTS_DIR } from "./config";
 
 /** Strip control characters for safe terminal/log output (log injection). */
 export function sanitizeForLog(value: string): string {
@@ -174,11 +173,6 @@ export function resolveWritableFileUnderRoots(userPath: string, allowedRoots: re
   return target;
 }
 
-/** Resolve a writable file under default vakt path roots ({@link userPathRoots}). */
-export function resolveBoundedWritableFile(userPath: string): string {
-  return resolveWritableFileUnderRoots(userPath, userPathRoots(AGENTS_DIR));
-}
-
 /** Resolve a user-supplied path to an absolute, existing directory under allowed roots. */
 export function resolveLocalDirectory(userPath: string, allowedRoots: readonly string[]): string {
   if (!userPath || userPath.includes("\0")) {
@@ -210,11 +204,7 @@ export function assertSafeSkillName(name: string): string {
 }
 
 export { assertGitRemoteUrl, validatedHttpsGitRemote } from "./safe-input-git";
-export {
-  assertDockerImageRef,
-  assertOciReference,
-  validatedOciReference,
-} from "./safe-input-oci";
+export { assertDockerImageRef, assertOciReference } from "./safe-input-oci";
 
 const DOCKER_ID = /^[a-f0-9]{12,64}$/i;
 

@@ -71,7 +71,14 @@ describe("DockerSandboxProvider", () => {
     frame.set(new TextEncoder().encode("hello"), 8);
 
     const execMockFetch: TestFetch = (input) => {
-      const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
+      let url: string;
+      if (typeof input === "string") {
+        url = input;
+      } else if (input instanceof URL) {
+        url = input.href;
+      } else {
+        url = input.url;
+      }
       if (url.includes("/exec/") && url.includes("/start")) {
         return Promise.resolve(new Response(frame.buffer));
       }

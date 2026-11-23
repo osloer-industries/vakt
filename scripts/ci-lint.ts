@@ -4,6 +4,7 @@ import { dirname } from "node:path";
 import { ciExecFile, resolveCiBinary } from "./ci-env.ts";
 import { walkRepoFiles } from "./ci-fs.ts";
 import { runCountSuppressionsCli } from "./count-suppressions.ts";
+import { runLintSonarjsCli } from "./lint-sonarjs.ts";
 
 const BashBin = resolveCiBinary("bash");
 const BunBin = resolveCiBinary("bun");
@@ -31,9 +32,7 @@ ciExecFile(BunBin, ["x", "oxlint", "-c", ".oxlintrc.json", "src", "scripts", "te
   pathPrefix: toolPathPrefix,
 });
 
-ciExecFile(BunBin, ["x", "eslint", "src/", "--ignore-pattern", "**/*.test.ts"], {
-  pathPrefix: toolPathPrefix,
-});
+runLintSonarjsCli([]);
 
 runCountSuppressionsCli(import.meta.url, []);
 
