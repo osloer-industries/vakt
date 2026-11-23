@@ -1,14 +1,15 @@
 import type { Command } from "commander";
 import { existsSync, readFileSync } from "fs";
 import { PID_PATH, sendToDaemon } from "../daemon/ipc";
+import { DaemonStatusDataSchema } from "../lib/schemas";
 import { runDaemon } from "../daemon/index";
 
 export function registerDaemon(program: Command): void {
   const daemon = program.command("daemon").description("Manage the vakt daemon process");
 
   // Hidden subcommand used for self-exec in both dev and compiled mode.
-  daemon.command("_run", { hidden: true }).action(async () => {
-    await runDaemon();
+  daemon.command("_run", { hidden: true }).action(() => {
+    runDaemon();
   });
 
   daemon.command("start").description("Start the daemon").action(async () => {
@@ -39,7 +40,12 @@ export function registerDaemon(program: Command): void {
   daemon.command("status").description("Show daemon and server status").action(async () => {
     const r = await sendToDaemon({ type: "status" });
     if (!r.ok) { console.log(r.error); return; }
-    const d = r.data as { pid: number; servers: Record<string, any> };
+    const parsed = DaemonStatusDataSchema.safeParse(r.data);
+    if (!parsed.success) {
+      console.log("Daemon returned unexpected status payload");
+      return;
+    }
+    const d = parsed.data;
     console.log(`\nDaemon running (pid ${d.pid})\n`);
     console.log(`${"SERVER".padEnd(22)} STATUS     PID`);
     console.log("─".repeat(45));

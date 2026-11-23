@@ -1,9 +1,10 @@
 import { describe, it, expect, beforeEach } from "bun:test";
 import { mkdirSync } from "fs";
 import { resolveSecretRefs, secretsSet, secretsGet, secretsDelete, secretsList, secretsHas, getBackend } from "./secrets";
+import { expectEnv } from "./test-assert";
 
 // setup.ts sets AGENTS_SECRETS_BACKEND=env and AGENTS_DIR to a sandbox
-const AGENTS = process.env["AGENTS_DIR"]!;
+const AGENTS = expectEnv("AGENTS_DIR");
 
 beforeEach(() => {
   mkdirSync(AGENTS, { recursive: true });
@@ -32,7 +33,8 @@ describe("env backend CRUD", () => {
   });
 
   it("delete is idempotent — no throw when key missing", async () => {
-    await expect(secretsDelete("NEVER_SET_KEY_ABC")).resolves.toBeUndefined();
+    await secretsDelete("NEVER_SET_KEY_ABC");
+    expect(await secretsGet("NEVER_SET_KEY_ABC")).toBeNull();
   });
 
   it("list returns stored keys", async () => {

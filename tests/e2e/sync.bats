@@ -354,6 +354,7 @@ assert cfg.get('unclassified-srv', {}).get('global') == True, 'expected global: 
 @test "sync prompts for unclassified skill and classifies on n" {
   local skill_dir
   skill_dir="$(mktemp -d)"
+  export VAKT_EXTRA_PATH_ROOTS="${VAKT_EXTRA_PATH_ROOTS}:${skill_dir}"
   # Create a skill with no global field in SKILL.md
   mkdir -p "$skill_dir/unclassified-skill"
   cat > "$skill_dir/unclassified-skill/SKILL.md" << 'SKILLEOF'

@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { existsSync, readFileSync } from "node:fs";
 import type { Command } from "commander";
 import { AGENTS_DIR, loadAgentConfig } from "../lib/config";
+import { isRecord, nestedRecordGet, nestedRecordSet, parseJsonUnknown } from "../lib/type-guards";
 
 const configPath = join(AGENTS_DIR, "config.json");
 
@@ -11,22 +12,6 @@ function guardInit(): void {
     console.error("Run 'vakt init' first");
     process.exit(1);
   }
-}
-
-function getNestedKey(obj: Record<string, unknown>, dotKey: string): unknown {
-  return dotKey.split(".").reduce<unknown>((acc, k) =>
-    acc && typeof acc === "object" ? (acc as Record<string, unknown>)[k] : undefined, obj);
-}
-
-function setNestedKey(obj: Record<string, unknown>, dotKey: string, value: unknown): void {
-  const parts = dotKey.split(".");
-  let cur = obj;
-  for (let i = 0; i < parts.length - 1; i++) {
-    const k = parts[i]!;
-    if (!cur[k] || typeof cur[k] !== "object") cur[k] = {};
-    cur = cur[k] as Record<string, unknown>;
-  }
-  cur[parts.at(-1)!] = value;
 }
 
 function listAction(): void {
@@ -49,8 +34,7 @@ export function registerConfig(program: Command): void {
     .description("Get a config value by dot-notation key")
     .action((key: string) => {
       guardInit();
-      const cfg = loadAgentConfig() as Record<string, unknown>;
-      const val = getNestedKey(cfg, key);
+      const val = nestedRecordGet(loadAgentConfig(), key);
       if (val === undefined) return; // exit 0 with empty output
       console.log(typeof val === "string" ? val : JSON.stringify(val));
     });
@@ -59,11 +43,13 @@ export function registerConfig(program: Command): void {
     .description("Set a config value by dot-notation key")
     .action(async (key: string, value: string) => {
       guardInit();
-      const raw = existsSync(configPath) ? JSON.parse(readFileSync(configPath, "utf-8")) : {};
-      const parsed = (() => { try { return JSON.parse(value); } catch { return value; } })();
-      setNestedKey(raw, key, parsed);
+      const rawText = existsSync(configPath) ? readFileSync(configPath, "utf-8") : "{}";
+      const parsed = parseJsonUnknown(rawText);
+      const raw = isRecord(parsed) ? parsed : {};
+      const next = (() => { try { return parseJsonUnknown(value); } catch { return value; } })();
+      nestedRecordSet(raw, key, next);
       await Bun.write(configPath, JSON.stringify(raw, null, 2));
-      console.log(`Set ${key} = ${JSON.stringify(parsed)}`);
+      console.log(`Set ${key} = ${JSON.stringify(next)}`);
     });
 
   setCmd.configureOutput({

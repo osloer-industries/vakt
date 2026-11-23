@@ -170,10 +170,11 @@ function extractToolMentions(planText: string): Array<{ step: number; tool: stri
       const regex = new RegExp(`\\b${tool}\\s*\\(`, "i");
       if (regex.test(line)) {
         const argsMatch = /\(([^)]*)\)/.exec(line);
+        const args = argsMatch?.[1];
         mentions.push({
           step: stepNum || i + 1,
-          tool: tool,
-          args: argsMatch?.[1],
+          tool,
+          ...(args === undefined ? {} : { args }),
         });
       }
     }
@@ -192,6 +193,9 @@ function hasOutboundNetwork(args: string | undefined): boolean {
   return OUTBOUND_NETWORK_PATTERNS.some((p) => p.test(args));
 }
 
+const red = (s: string) => s;
+const yellow = (s: string) => s;
+
 function formatViolations(violations: Array<{
   step: number;
   tool: string;
@@ -199,9 +203,6 @@ function formatViolations(violations: Array<{
   severity: "error" | "warning";
   suggestion?: string;
 }>): string {
-  const red = (s: string) => s;
-  const yellow = (s: string) => s;
-
   return violations.map((v) => {
     const icon = v.severity === "error" ? red("✗") : yellow("⚠");
     const lines = [
