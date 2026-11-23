@@ -7,6 +7,7 @@ docs/plans/
 # Dependencies
 node_modules/
 package-lock.json
+!packages/eslint-sonarjs/package-lock.json
 yarn.lock
 
 # Test artifacts
