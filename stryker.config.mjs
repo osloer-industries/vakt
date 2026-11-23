@@ -1,4 +1,10 @@
 // @ts-check
+/**
+ * TypeScript 7 removes `parseConfigFileTextToJson`, which @stryker-mutator/core calls when
+ * rewriting tsconfig paths in its sandbox. Point `tsconfigFile` at a missing file so the
+ * preprocessor skips that step (vakt tsconfig has no extends/references to rewrite).
+ * https://github.com/stryker-mutator/stryker-js/issues/6110
+ */
 import "@stryker-mutator/bun-runner";
 
 /** @type {import("@stryker-mutator/core").PartialStrykerOptions} */
@@ -8,7 +14,7 @@ export default {
   plugins: ["@stryker-mutator/bun-runner"],
   testRunner: "bun",
   reporters: ["clear-text", "progress"],
-  tsconfigFile: "tsconfig.json",
+  tsconfigFile: ".stryker-tsconfig-intentionally-missing.json",
   mutate: ["src/**/*.ts", "!src/**/*.test.ts"],
   coverageAnalysis: "perTest",
   ignoreStatic: true,
