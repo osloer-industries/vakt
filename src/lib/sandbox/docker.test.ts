@@ -91,17 +91,12 @@ describe("DockerSandboxProvider", () => {
     const handle: SandboxHandle = { id: "c0ffeeabc1234", provider: "docker" };
     let capturedMethod = "";
     let capturedUrl = "";
-    (globalThis as any).fetch = mock(async (url: string, init?: RequestInit) => {
+    const destroyMockFetch: TestFetch = (input, init) => {
+      capturedUrl = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
       capturedMethod = init?.method ?? "GET";
-      capturedUrl = url as string;
-      return {
-        ok: true,
-        status: 200,
-        json: async () => ({}),
-        text: async () => "",
-        arrayBuffer: async () => new ArrayBuffer(0),
-      } as unknown as Response;
-    });
+      return Promise.resolve(new Response("{}", { status: 200 }));
+    };
+    globalThis.fetch = asFetch(destroyMockFetch);
     await provider.destroy(handle);
     expect(capturedMethod).toBe("DELETE");
     expect(capturedUrl).toContain("/containers/c0ffeeabc1234?force=true");
