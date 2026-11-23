@@ -1,10 +1,11 @@
 import { describe, it, expect } from "bun:test";
-import { mkdtempSync, writeFileSync, rmSync } from "node:fs";
+import { mkdtempSync, mkdirSync, symlinkSync, writeFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import {
   sanitizeForLog,
   assertSafePath,
   resolveReadableFile,
+  resolveWritableFileUnderRoots,
   resolveLocalDirectory,
   assertSafeSkillName,
   assertGitRemoteUrl,
@@ -130,5 +131,25 @@ describe("assertOciReference", () => {
 describe("assertSafePath", () => {
   it("rejects relative paths", () => {
     expect(() => assertSafePath("relative")).toThrow();
+  });
+});
+
+describe("resolveWritableFileUnderRoots", () => {
+  it("accepts paths under a symlinked allowed root (macOS /var-style roots)", () => {
+    const base = mkdtempSync("/tmp/vakt-root-");
+    const link = `${base}-link`;
+    try {
+      mkdirSync(join(base, "nested"), { recursive: true });
+      symlinkSync(base, link);
+      const roots = [link];
+      expect(() =>
+        resolveWritableFileUnderRoots(join(link, "nested", "out.txt"), roots),
+      ).not.toThrow();
+      const target = resolveWritableFileUnderRoots(join(link, "nested", "out.txt"), roots);
+      expect(target.endsWith("/nested/out.txt")).toBe(true);
+    } finally {
+      rmSync(base, { recursive: true, force: true });
+      rmSync(link, { recursive: true, force: true });
+    }
   });
 });

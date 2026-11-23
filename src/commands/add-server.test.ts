@@ -37,10 +37,10 @@ describe("add-server writes global field to mcp-config.json", () => {
   const agentsDir = join(tmp, ".agents");
   const mcpPath = join(agentsDir, "mcp-config.json");
 
-  beforeEach(() => {
+  beforeEach(async () => {
     mkdirSync(agentsDir, { recursive: true });
     // Write empty mcp-config.json
-    Bun.write(mcpPath, "{}");
+    await Bun.write(mcpPath, "{}");
   });
 
   afterEach(() => rmSync(tmp, { recursive: true, force: true }));

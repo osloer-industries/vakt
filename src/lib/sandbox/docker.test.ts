@@ -1,26 +1,36 @@
-import { describe, it, expect, mock, beforeEach, afterAll } from "bun:test";
+import { describe, it, expect, beforeEach, afterAll } from "bun:test";
 import type { SandboxHandle } from "../sandbox";
+import { expectAt } from "../test-assert";
 
 const mockResponses: Array<{ ok: boolean; body: unknown; status?: number }> = [];
 
 const originalFetch = globalThis.fetch;
+
 function pushMock(body: unknown, ok = true, status = 200) {
   mockResponses.push({ ok, body, status });
 }
 
+function dequeueMockResponse(): Response {
+  const resp = mockResponses.shift();
+  if (!resp) throw new Error("Unexpected fetch call");
+  const status = resp.status ?? 200;
+  if (resp.body instanceof ArrayBuffer) {
+    return new Response(resp.body, { status });
+  }
+  return new Response(JSON.stringify(resp.body), { status });
+}
+
+type TestFetch = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+
+function asFetch(impl: TestFetch): typeof fetch {
+  return Object.assign(impl, { preconnect: globalThis.fetch.preconnect.bind(globalThis.fetch) });
+}
+
+const queuedMockFetch: TestFetch = () => Promise.resolve(dequeueMockResponse());
+
 beforeEach(() => {
   mockResponses.length = 0;
-  (globalThis as any).fetch = mock(async (_url: string, _opts?: RequestInit) => {
-    const resp = mockResponses.shift();
-    if (!resp) throw new Error("Unexpected fetch call");
-    return {
-      ok: resp.ok,
-      status: resp.status ?? 200,
-      json: async () => resp.body,
-      text: async () => JSON.stringify(resp.body),
-      arrayBuffer: async () => new ArrayBuffer(0),
-    } as unknown as Response;
-  });
+  globalThis.fetch = asFetch(queuedMockFetch);
 });
 
 afterAll(() => { globalThis.fetch = originalFetch; });
@@ -60,15 +70,17 @@ describe("DockerSandboxProvider", () => {
     new DataView(frame.buffer).setUint32(4, 5, false);
     frame.set(new TextEncoder().encode("hello"), 8);
 
-    (globalThis as any).fetch = mock(async (url: string) => {
-      if ((url as string).includes("/exec/") && (url as string).includes("/start")) {
-        return { ok: true, status: 200, arrayBuffer: async () => frame.buffer, json: async () => ({}), text: async () => "" } as unknown as Response;
+    const execMockFetch: TestFetch = (input) => {
+      const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
+      if (url.includes("/exec/") && url.includes("/start")) {
+        return Promise.resolve(new Response(frame.buffer));
       }
-      if ((url as string).includes("/exec/") && (url as string).includes("/json")) {
-        return { ok: true, status: 200, json: async () => ({ ExitCode: 0 }), text: async () => "", arrayBuffer: async () => new ArrayBuffer(0) } as unknown as Response;
+      if (url.includes("/exec/") && url.includes("/json")) {
+        return Promise.resolve(new Response(JSON.stringify({ ExitCode: 0 }), { status: 200 }));
       }
-        return { ok: true, status: 200, json: async () => ({ Id: "c0ffee9abc123" }), text: async () => "", arrayBuffer: async () => new ArrayBuffer(0) } as unknown as Response;
-    });
+      return Promise.resolve(new Response(JSON.stringify({ Id: "c0ffee9abc123" }), { status: 200 }));
+    };
+    globalThis.fetch = asFetch(execMockFetch);
 
     const result = await provider.exec(handle, ["echo", "hello"]);
     expect(result.stdout).toBe("hello");
@@ -84,8 +96,11 @@ describe("DockerSandboxProvider", () => {
 
   it("list: filters by label", async () => {
     pushMock([{ Id: "c0ffeeabc1234", Labels: { "vakt.swarm-id": "s1" } }]);
-    const results = await provider.list!({ labels: { "vakt.swarm-id": "s1" } });
+    if (!provider.list) {
+      throw new Error("provider.list is not defined");
+    }
+    const results = await provider.list({ labels: { "vakt.swarm-id": "s1" } });
     expect(results).toHaveLength(1);
-    expect(results[0]!.id).toBe("c0ffeeabc1234");
+    expect(expectAt(results, 0, "container").id).toBe("c0ffeeabc1234");
   });
 });
