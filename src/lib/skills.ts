@@ -1,17 +1,9 @@
-import {
-  closeSync,
-  existsSync,
-  fsyncSync,
-  openSync,
-  readdirSync,
-  readFileSync,
-  renameSync,
-  statSync,
-  writeSync,
-} from "node:fs";
-import { join, basename, dirname } from "node:path";
+import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
+import { basename, join, resolve, sep } from "node:path";
 import { spawnSync } from "node:child_process";
-import { assertSafePath } from "./safe-input";
+import { assertSafePath, userPathRoots } from "./safe-input";
+import { AGENTS_DIR } from "./config";
+import { writeUtf8FileAtomic } from "./atomic-write";
 import { requireExecutable, safeSpawnEnv } from "./safe-exec";
 
 export { assertSafePath } from "./safe-input";
@@ -27,8 +19,14 @@ function parseFrontmatter(content: string): Record<string, string> {
   const result: Record<string, string> = {};
   for (let i = 1; i < lines.length; i++) {
     if (lines[i] === "---") break;
-    const kv = (/^(\w[\w-]*):\s*(.+)/).exec(lines[i]!);
-    if (kv) result[kv[1]!] = kv[2]!.trim();
+    const line = lines[i];
+    if (line === undefined) break;
+    const kv = (/^(\w[\w-]*):\s*(.+)/).exec(line);
+    if (kv) {
+      const key = kv[1];
+      const value = kv[2];
+      if (key !== undefined && value !== undefined) result[key] = value.trim();
+    }
   }
   return result;
 }
@@ -75,7 +73,9 @@ function parseBlockArray(lines: string[], startIndex: number): { items: string[]
   const items: string[] = [];
   let i = startIndex;
   while (i < lines.length) {
-    const itemLine = lines[i]!.trimStart();
+    const rawLine = lines[i];
+    if (rawLine === undefined) break;
+    const itemLine = rawLine.trimStart();
     if (!itemLine.startsWith("- ")) break;
     items.push(itemLine.slice(2).trim());
     i++;
@@ -98,6 +98,26 @@ function applyScalarField(meta: SkillMeta, key: string, trimmed: string): void {
  * including the `allowed-tools` array field (inline or block style).
  * Uses only string operations — no regex — to guarantee linear runtime.
  */
+function advanceFrontmatterLine(meta: SkillMeta, lines: string[], index: number): number {
+  const line = lines[index];
+  if (line === undefined) return lines.length;
+  const colonPos = line.indexOf(":");
+  if (colonPos <= 0) return index + 1;
+
+  const key = line.slice(0, colonPos);
+  if (!isValidKey(key)) return index + 1;
+
+  const rest = line.slice(colonPos + 1).trimStart();
+  if (rest === "") {
+    const { items, nextIndex } = parseBlockArray(lines, index + 1);
+    if (key === "allowed-tools" && items.length) meta.allowedTools = items;
+    return nextIndex;
+  }
+
+  applyScalarField(meta, key, rest.trim());
+  return index + 1;
+}
+
 export function parseSkillFrontmatter(content: string): SkillMeta {
   const meta: SkillMeta = {};
   // Extract frontmatter block using indexOf (avoids multi-line regex ReDoS)
@@ -110,23 +130,7 @@ export function parseSkillFrontmatter(content: string): SkillMeta {
   const lines = block.split("\n");
   let i = 0;
   while (i < lines.length) {
-    const line = lines[i]!;
-    const colonPos = line.indexOf(":");
-    if (colonPos <= 0) { i++; continue; }
-
-    const key = line.slice(0, colonPos);
-    if (!isValidKey(key)) { i++; continue; }
-
-    const rest = line.slice(colonPos + 1).trimStart();
-    if (rest === "") {
-      const { items, nextIndex } = parseBlockArray(lines, i + 1);
-      if (key === "allowed-tools" && items.length) meta.allowedTools = items;
-      i = nextIndex;
-      continue;
-    }
-
-    applyScalarField(meta, key, rest.trim());
-    i++;
+    i = advanceFrontmatterLine(meta, lines, i);
   }
   return meta;
 }
@@ -202,7 +206,9 @@ export function scanSkillHazards(skillDir: string): SkillHazard[] {
     if (!existsSync(filePath)) return;
     const lines = readFileSync(filePath, "utf-8").split("\n");
     for (let i = 0; i < lines.length; i++) {
-      const label = findLineHazard(lines[i]!);
+      const line = lines[i];
+      if (line === undefined) continue;
+      const label = findLineHazard(line);
       if (label) hazards.push({ file: basename(filePath), pattern: label, line: i + 1 });
     }
   }
@@ -269,23 +275,6 @@ function cleanGitEnv(): NodeJS.ProcessEnv {
 
 function gitBinary(): string {
   return requireExecutable("git");
-}
-
-function writeUtf8FileAtomic(filePath: string, content: string): void {
-  assertSafePath(filePath);
-  assertSafePath(dirname(filePath));
-  const tmp = join(
-    dirname(filePath),
-    `.${basename(filePath)}.${process.pid}.${Date.now()}.tmp`,
-  );
-  const fd = openSync(tmp, "wx", 0o600);
-  try {
-    writeSync(fd, content, undefined, "utf-8");
-    fsyncSync(fd);
-  } finally {
-    closeSync(fd);
-  }
-  renameSync(tmp, filePath);
 }
 
 /**
@@ -357,11 +346,28 @@ export function pullSkill(skillDir: string): boolean {
   return result.status === 0;
 }
 
+function writeRootsForSkillDir(skillDir: string): readonly string[] {
+  const roots = userPathRoots(AGENTS_DIR);
+  const dir = resolve(skillDir);
+  for (const root of roots) {
+    const base = resolve(root);
+    if (dir === base || dir.startsWith(`${base}${sep}`)) {
+      return roots;
+    }
+  }
+  return [dir, ...roots];
+}
+
 export function setSkillGlobal(skillDir: string, value: boolean): void {
   assertSafePath(skillDir);
   const skillMd = join(skillDir, "SKILL.md");
+  const writeRoots = writeRootsForSkillDir(skillDir);
   if (!existsSync(skillMd)) {
-    writeUtf8FileAtomic(skillMd, `---\nname: ${basename(skillDir)}\nglobal: ${value}\n---\n`);
+    writeUtf8FileAtomic(
+      skillMd,
+      `---\nname: ${basename(skillDir)}\nglobal: ${value}\n---\n`,
+      writeRoots,
+    );
     return;
   }
   let content = readFileSync(skillMd, "utf-8");
@@ -373,8 +379,8 @@ export function setSkillGlobal(skillDir: string, value: boolean): void {
       // Inject after opening ---
       content = content.replace(/^---\r?\n/, `---\nglobal: ${value}\n`);
     }
-    writeUtf8FileAtomic(skillMd, content);
+    writeUtf8FileAtomic(skillMd, content, writeRoots);
   } else {
-    writeUtf8FileAtomic(skillMd, `---\nglobal: ${value}\n---\n\n` + content);
+    writeUtf8FileAtomic(skillMd, `---\nglobal: ${value}\n---\n\n` + content, writeRoots);
   }
 }

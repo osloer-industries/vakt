@@ -15,6 +15,9 @@ set +e
 STAGED_TS=$(git diff --cached --name-only --diff-filter=ACM | grep '^src/.*\.ts$' | grep -v '\.test\.ts$')
 if [ -n "$STAGED_TS" ]; then
   # shellcheck disable=SC2086
+  bunx oxlint -c .oxlintrc.json $STAGED_TS
+  [ $? -ne 0 ] && exit 1
+  # shellcheck disable=SC2086
   bunx eslint $STAGED_TS
   [ $? -ne 0 ] && exit 1
 fi

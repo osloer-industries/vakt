@@ -1,4 +1,6 @@
 import type { McpConfig, AgentConfig } from "../lib/schemas";
+import { requireStdioServer } from "../lib/stdio-server";
+import { envRecord } from "../lib/type-guards";
 
 export type ServerStatus = {
   status: "stopped" | "starting" | "running" | "crashed";
@@ -24,44 +26,45 @@ export class ProcessManager {
     return { ...this.statuses };
   }
 
-  async start(name: string): Promise<void> {
-    const server = this.mcpConfig[name] as any;
-    if (!server?.command) throw new Error(`No command configured for server: ${name}`);
+  start(name: string): void {
+    const server = requireStdioServer(name, this.mcpConfig[name]);
 
-    this.statuses[name] = { ...this.statuses[name]!, status: "starting" };
+    const prior = this.statuses[name] ?? { status: "stopped" as const, restarts: 0 };
+    this.statuses[name] = { ...prior, status: "starting" };
 
-    const proc = Bun.spawn([server.command as string, ...(server.args as string[] ?? [])], {
+    const proc = Bun.spawn([server.command, ...(server.args ?? [])], {
       stdin: "pipe", stdout: "pipe", stderr: "pipe",
-      env: { ...process.env, ...(server.env as Record<string, string>) },
+      env: { ...envRecord(), ...server.env },
     });
 
     this.procs[name] = proc;
     this.statuses[name] = {
       status: "running",
       pid: proc.pid,
-      restarts: this.statuses[name]?.restarts ?? 0,
+      restarts: prior.restarts,
       lastStartedAt: Date.now(),
     };
 
     // Auto-restart on unexpected exit
     void proc.exited.then((code) => {
-      if (code !== 0 && this.statuses[name]?.status === "running") {
-        this.statuses[name]!.status = "crashed";
-        this.statuses[name]!.restarts += 1;
-        setTimeout(() => { void this.start(name).catch(console.error); }, 2_000);
+      const status = this.statuses[name];
+      if (code !== 0 && status?.status === "running") {
+        this.statuses[name] = { ...status, status: "crashed", restarts: status.restarts + 1 };
+        setTimeout(() => { this.start(name); }, 2_000);
       }
     });
   }
 
-  async stop(name: string): Promise<void> {
+  stop(name: string): void {
     this.procs[name]?.kill();
     delete this.procs[name];
-    if (this.statuses[name]) this.statuses[name]!.status = "stopped";
+    const status = this.statuses[name];
+    if (status) this.statuses[name] = { ...status, status: "stopped" };
   }
 
-  async restart(name: string): Promise<void> {
-    await this.stop(name);
-    await this.start(name);
+  restart(name: string): void {
+    this.stop(name);
+    this.start(name);
   }
 
   getProcess(name: string) { return this.procs[name] ?? null; }

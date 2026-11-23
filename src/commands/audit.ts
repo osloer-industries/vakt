@@ -10,7 +10,9 @@ function parseDuration(s: string): number {
   if (!m) return 24 * 3_600_000;
   const n = Number(m[1]);
   const units: Record<string, number> = { h: 3_600_000, d: 86_400_000, w: 604_800_000 };
-  return n * (units[m[2]!] ?? 3_600_000);
+  const unit = m[2];
+  if (unit === undefined) return n * 3_600_000;
+  return n * (units[unit] ?? 3_600_000);
 }
 
 type SkillRow = { name: string; allowedTools: string[] | null; scoped: boolean; hazards: ReturnType<typeof scanSkillHazards> };
@@ -75,12 +77,12 @@ export function registerAudit(program: Command): void {
     .option("--server <name>", "filter by server name")
     .option("--last <window>", "time window: 1h, 24h, 7d, 4w", "24h")
     .option("--limit <n>",    "max rows to show", "50")
-    .action((opts) => {
+    .action((opts: { server?: string; last?: string; limit?: string }) => {
       const store = new AuditStore();
       store.init();
       const rows = store.query({
-        serverName: opts.server,
-        since: Date.now() - parseDuration(opts.last as string),
+        ...(opts.server === undefined ? {} : { serverName: opts.server }),
+        since: Date.now() - parseDuration(String(opts.last)),
         limit: Number(opts.limit),
       });
 
@@ -94,14 +96,15 @@ export function registerAudit(program: Command): void {
       console.log("─".repeat(76));
 
       for (const r of rows) {
-        const time   = new Date(r.started_at as number).toISOString().slice(11, 23);
+        const time   = new Date(r.started_at).toISOString().slice(11, 23);
         const policy = r.policy_result === "deny" ? "✗ deny " : "✓ allow";
-        const dur    = (r.duration_ms as number) < 1000
-          ? `${r.duration_ms}ms`
-          : `${((r.duration_ms as number) / 1000).toFixed(1)}s`;
+        const durationMs = r.duration_ms ?? 0;
+        const dur    = durationMs < 1000
+          ? `${durationMs}ms`
+          : `${(durationMs / 1000).toFixed(1)}s`;
         console.log(
-          `${time.padEnd(COL_WIDTH.time)} ${(r.server_name as string).padEnd(COL_WIDTH.server)} ` +
-          `${(r.tool_name as string).padEnd(COL_WIDTH.tool)} ${policy.padEnd(COL_WIDTH.policy)} ${dur}`
+          `${time.padEnd(COL_WIDTH.time)} ${r.server_name.padEnd(COL_WIDTH.server)} ` +
+          `${r.tool_name.padEnd(COL_WIDTH.tool)} ${policy.padEnd(COL_WIDTH.policy)} ${dur}`
         );
       }
     });
@@ -127,11 +130,14 @@ export function registerAudit(program: Command): void {
     .description("Export audit log as JSON (pipe to SIEM or OTLP collector)")
     .option("--since <iso-date>", "only events after this date")
     .option("--limit <n>", "max rows", "10000")
-    .action((opts) => {
+    .action((opts: { since?: string; limit?: string }) => {
       const store = new AuditStore();
       store.init();
-      const since = opts.since ? new Date(opts.since as string).getTime() : 0;
-      const rows = store.query({ since, limit: Number(opts.limit) });
+      const since = opts.since ? new Date(opts.since).getTime() : 0;
+      const rows = store.query({
+        ...(since > 0 ? { since } : {}),
+        limit: Number(opts.limit),
+      });
       console.log(JSON.stringify(rows, null, 2));
     });
 }

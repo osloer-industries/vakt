@@ -39,43 +39,50 @@ export interface GateResult {
 
 // ── Skill checks ─────────────────────────────────────────────────────────────
 
+function skillUnscopedIssue(entry: string, policy: Policy | null): GateIssue | null {
+  const warnUnscoped = policy?.skills?.warnUnscoped ?? true;
+  const scopeRequired = policy?.skills?.scopeRequired;
+  if (scopeRequired || warnUnscoped) {
+    return {
+      source: "skill",
+      name: entry,
+      severity: scopeRequired ? "error" : "warn",
+      code: "unscoped",
+      detail: "no allowed-tools declaration — any tool can run under this skill",
+    };
+  }
+  return null;
+}
+
+function skillHazardIssues(entry: string, skillPath: string, policy: Policy | null): GateIssue[] {
+  const severity: GateSeverity = policy?.skills?.blockOnHazards ? "error" : "warn";
+  return scanSkillHazards(skillPath).map((h) => ({
+    source: "skill" as const,
+    name: entry,
+    severity,
+    code: h.pattern,
+    detail: `${h.file}:${h.line}`,
+  }));
+}
+
+function scanOneSkill(entry: string, skillPath: string, policy: Policy | null): GateIssue[] {
+  const meta = readSkillMeta(skillPath);
+  const issues: GateIssue[] = [];
+  if (!meta.allowedTools) {
+    const unscoped = skillUnscopedIssue(entry, policy);
+    if (unscoped) issues.push(unscoped);
+  }
+  issues.push(...skillHazardIssues(entry, skillPath, policy));
+  return issues;
+}
+
 function checkSkills(skillsDir: string, policy: Policy | null): GateIssue[] {
   if (!existsSync(skillsDir)) return [];
-  const issues: GateIssue[] = [];
-
-  for (const entry of readdirSync(skillsDir)) {
+  return readdirSync(skillsDir).flatMap((entry) => {
     const skillPath = join(skillsDir, entry);
-    if (!statSync(skillPath).isDirectory()) continue;
-
-    const meta = readSkillMeta(skillPath);
-
-    // Unscoped: no allowed-tools
-    const warnUnscoped = policy?.skills?.warnUnscoped ?? true;
-    const scopeRequired = policy?.skills?.scopeRequired;
-    if (!meta.allowedTools && (scopeRequired || warnUnscoped)) {
-      issues.push({
-        source: "skill",
-        name: entry,
-        severity: scopeRequired ? "error" : "warn",
-        code: "unscoped",
-        detail: "no allowed-tools declaration — any tool can run under this skill",
-      });
-    }
-
-    // Hazard scan
-    const hazards = scanSkillHazards(skillPath);
-    for (const h of hazards) {
-      issues.push({
-        source: "skill",
-        name: entry,
-        severity: policy?.skills?.blockOnHazards ? "error" : "warn",
-        code: h.pattern,
-        detail: `${h.file}:${h.line}`,
-      });
-    }
-  }
-
-  return issues;
+    if (!statSync(skillPath).isDirectory()) return [];
+    return scanOneSkill(entry, skillPath, policy);
+  });
 }
 
 // ── MCP checks ───────────────────────────────────────────────────────────────
