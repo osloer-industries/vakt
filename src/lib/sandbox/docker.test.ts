@@ -96,9 +96,17 @@ describe("DockerSandboxProvider", () => {
 
   it("destroy: calls DELETE /containers/{id}?force=true", async () => {
     const handle: SandboxHandle = { id: "c0ffeeabc1234", provider: "docker" };
-    pushMock({});
+    let capturedMethod = "";
+    let capturedUrl = "";
+    const destroyMockFetch: TestFetch = (input, init) => {
+      capturedUrl = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
+      capturedMethod = init?.method ?? "GET";
+      return Promise.resolve(new Response("{}", { status: 200 }));
+    };
+    globalThis.fetch = asFetch(destroyMockFetch);
     await provider.destroy(handle);
-    // No error = pass
+    expect(capturedMethod).toBe("DELETE");
+    expect(capturedUrl).toContain("/containers/c0ffeeabc1234?force=true");
   });
 
   it("list: filters by label", async () => {
