@@ -1,6 +1,6 @@
 import type { Command } from "commander";
 import { existsSync, mkdirSync, copyFileSync, appendFileSync } from "node:fs";
-import { join, dirname } from "node:path";
+import { join } from "node:path";
 import { requireExecutable, resolveExecutable } from "../lib/safe-exec";
 import { loadProviders } from "../lib/config";
 import { currentPlatformKey, platformStringPath } from "../lib/type-guards";
@@ -173,9 +173,5 @@ export function registerWatch(program: Command): void {
       const auditLog = join(agentsDir, "audit.log");
 
       await readWatchStream(proc.stdout.getReader(), watchPaths, auditLog, snapshotDir, opts);
-
-      // Suppress unused variable warning
-      void ok;
-      void dirname;
     });
 }
