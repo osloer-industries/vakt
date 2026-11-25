@@ -14,7 +14,7 @@ HISTORY_FILES=(
 found=0
 for cred in $CREDENTIAL_NAMES; do
   for hist_file in "${HISTORY_FILES[@]}"; do
-    [ -f "$hist_file" ] || continue
+    [[ -f "$hist_file" ]] || continue
     # Look for patterns like KEY=value or export KEY= (suggests value was typed inline)
     if grep -q "${cred}=" "$hist_file" 2>/dev/null; then
       echo "Found $cred= in $hist_file — value may have been typed inline" >&2
@@ -23,4 +23,4 @@ for cred in $CREDENTIAL_NAMES; do
   done
 done
 
-[ $found -eq 0 ]
+[[ $found -eq 0 ]]

@@ -27,4 +27,4 @@ for cred in $CREDENTIAL_NAMES; do
   fi
 done
 
-[ $found -eq 0 ]
+[[ $found -eq 0 ]]
