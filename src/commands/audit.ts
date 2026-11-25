@@ -3,6 +3,7 @@ import { join, basename } from "node:path";
 import type { Command } from "commander";
 import { AGENTS_DIR } from "../lib/config";
 import { AuditStore } from "../lib/audit";
+import { compressWithRtk } from "../lib/rtk";
 import { readSkillMeta, scanSkillHazards } from "../lib/skills";
 
 function parseDuration(s: string): number {
@@ -130,7 +131,8 @@ export function registerAudit(program: Command): void {
     .description("Export audit log as JSON (pipe to SIEM or OTLP collector)")
     .option("--since <iso-date>", "only events after this date")
     .option("--limit <n>", "max rows", "10000")
-    .action((opts: { since?: string; limit?: string }) => {
+    .option("--compress-rtk", "compress JSON export with RTK when installed")
+    .action(async (opts: { since?: string; limit?: string; compressRtk?: boolean }) => {
       const store = new AuditStore();
       store.init();
       const since = opts.since ? new Date(opts.since).getTime() : 0;
@@ -138,6 +140,11 @@ export function registerAudit(program: Command): void {
         ...(since > 0 ? { since } : {}),
         limit: Number(opts.limit),
       });
-      console.log(JSON.stringify(rows, null, 2));
+      const payload = JSON.stringify(rows, null, 2);
+      if (opts.compressRtk) {
+        console.log(await compressWithRtk(payload));
+        return;
+      }
+      console.log(payload);
     });
 }
