@@ -4,44 +4,46 @@ import { promptBoolean, readLineFromStream } from "./prompt";
 
 const noop = () => {};
 
+const lineReader = (value: string | null): (() => Promise<string | null>) => () => Promise.resolve(value);
+
 describe("promptBoolean", () => {
   test("returns true when user enters 'y'", async () => {
-    const result = await promptBoolean("Question?", false, async () => "y", noop);
+    const result = await promptBoolean("Question?", false, lineReader("y"), noop);
     expect(result).toBe(true);
   });
 
   test("returns true when user enters 'Y'", async () => {
-    const result = await promptBoolean("Question?", false, async () => "Y", noop);
+    const result = await promptBoolean("Question?", false, lineReader("Y"), noop);
     expect(result).toBe(true);
   });
 
   test("returns false when user enters 'n'", async () => {
-    const result = await promptBoolean("Question?", false, async () => "n", noop);
+    const result = await promptBoolean("Question?", false, lineReader("n"), noop);
     expect(result).toBe(false);
   });
 
   test("returns false when user enters anything other than y", async () => {
-    const result = await promptBoolean("Question?", false, async () => "yes", noop);
+    const result = await promptBoolean("Question?", false, lineReader("yes"), noop);
     expect(result).toBe(false);
   });
 
   test("returns false when user enters empty string", async () => {
-    const result = await promptBoolean("Question?", false, async () => "", noop);
+    const result = await promptBoolean("Question?", false, lineReader(""), noop);
     expect(result).toBe(false);
   });
 
   test("returns defaultValue when EOF (null)", async () => {
-    const result = await promptBoolean("Question?", false, async () => null, noop);
+    const result = await promptBoolean("Question?", false, lineReader(null), noop);
     expect(result).toBe(false);
   });
 
   test("returns true as defaultValue when EOF and defaultValue=true", async () => {
-    const result = await promptBoolean("Question?", true, async () => null, noop);
+    const result = await promptBoolean("Question?", true, lineReader(null), noop);
     expect(result).toBe(true);
   });
 
   test("trims whitespace from input", async () => {
-    const result = await promptBoolean("Question?", false, async () => "  y  ", noop);
+    const result = await promptBoolean("Question?", false, lineReader("  y  "), noop);
     expect(result).toBe(true);
   });
 });

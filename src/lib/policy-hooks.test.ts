@@ -7,9 +7,8 @@ import {
   syncMistralAgentsMd,
   syncHookProvider,
   syncPolicyHooks,
-  type HookResult,
 } from "./policy-hooks";
-import type { Policy, ToolPermission } from "./schemas";
+import { HookProviderIdSchema, type Policy, type ToolPermission } from "./schemas";
 
 const TEST_HOME = join(process.cwd(), ".test-home-policy-hooks");
 
@@ -18,8 +17,8 @@ const mockPolicy: Policy = {
   default: "deny",
   registryPolicy: "warn-unverified",
   tools: {
-    allow: [{ tool: "Read" }, { tool: "Edit" }, { tool: "Bash" }] as ToolPermission[],
-    deny: [{ tool: "WebSearch" }, { tool: "WebFetch" }] as ToolPermission[],
+    allow: [{ tool: "Read" }, { tool: "Edit" }, { tool: "Bash" }] satisfies ToolPermission[],
+    deny: [{ tool: "WebSearch" }, { tool: "WebFetch" }] satisfies ToolPermission[],
   },
 };
 
@@ -349,7 +348,11 @@ describe("policy-hooks", () => {
     });
 
     it("returns skipped for unknown provider", () => {
-      const result = syncPolicyHooks("unknown" as "claude", mockPolicy, false);
+      const provider = HookProviderIdSchema.safeParse("unknown");
+      expect(provider.success).toBe(false);
+      const result = provider.success
+        ? syncPolicyHooks(provider.data, mockPolicy, false)
+        : { written: false, path: "", action: "skipped" };
       expect(result.action).toBe("skipped");
     });
   });
@@ -367,7 +370,7 @@ describe("policy-hooks", () => {
         default: "allow",
         registryPolicy: "allow-unverified",
         tools: {
-          allow: [{ tool: "Read" }, { tool: "Edit" }] as ToolPermission[],
+          allow: [{ tool: "Read" }, { tool: "Edit" }] satisfies ToolPermission[],
           deny: [],
         },
       };
@@ -387,7 +390,7 @@ describe("policy-hooks", () => {
         registryPolicy: "allow-unverified",
         tools: {
           allow: [],
-          deny: [{ tool: "Delete" }] as ToolPermission[],
+          deny: [{ tool: "Delete" }] satisfies ToolPermission[],
         },
       };
 

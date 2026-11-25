@@ -13,7 +13,7 @@ export function registerSearch(program: Command): void {
       try {
         results = await client.search(query, Number(opts.limit ?? 10));
       } catch (e) {
-        console.error(`Registry unavailable: ${e}`);
+        console.error(`Registry unavailable: ${e instanceof Error ? e.message : String(e)}`);
         process.exit(1);
       }
       if (results.length === 0) {

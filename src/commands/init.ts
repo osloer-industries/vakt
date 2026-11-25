@@ -18,6 +18,11 @@ const DEFAULT_MCP_CONFIG = {
   },
 };
 
+const dim = (s: string) => `\x1b[2m${s}\x1b[0m`;
+const bold = (s: string) => `\x1b[1m${s}\x1b[0m`;
+const green = (s: string) => `\x1b[32m${s}\x1b[0m`;
+const yellow = (s: string) => `\x1b[33m${s}\x1b[0m`;
+
 const AGENTS_MD = `# Agent Standards
 
 This directory contains your personal AI agent configuration.
@@ -50,12 +55,8 @@ export function registerInit(program: Command): void {
     .command("init")
     .description("Initialize ~/.agents/ directory")
     .option("--dry-run", "Preview changes without applying")
-    .action(async (opts: { dryRun?: boolean }) => {
+    .action((opts: { dryRun?: boolean }) => {
       const dryRun = opts.dryRun ?? false;
-      const dim = (s: string) => `\x1b[2m${s}\x1b[0m`;
-      const bold = (s: string) => `\x1b[1m${s}\x1b[0m`;
-      const green = (s: string) => `\x1b[32m${s}\x1b[0m`;
-      const yellow = (s: string) => `\x1b[33m${s}\x1b[0m`;
 
       console.log();
       console.log(bold("Initializing ~/.agents/"));

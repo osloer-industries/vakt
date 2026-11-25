@@ -59,6 +59,64 @@ async function fetchSkillsArtifact(remoteCfg: RemoteCfg, agentsDir: string, dryR
   // Skills manifest is optional — not an error if missing
 }
 
+type PullOpts = { dryRun?: boolean; policyOnly?: boolean; mcpOnly?: boolean; skillsOnly?: boolean };
+
+function loadPullRemoteConfig(): RemoteCfg {
+  const cfg = loadAgentConfig();
+  if (!cfg.remote?.url) {
+    console.error("No remote.url configured.");
+    console.error("Set it with: vakt config set remote.url https://github.com/org/agent-config");
+    process.exit(1);
+  }
+  return cfg.remote;
+}
+
+function ensureAgentsDirForPull(): string {
+  const agentsDir = process.env["AGENTS_DIR"] ?? join(process.env["HOME"] ?? "~", ".agents");
+  if (!existsSync(agentsDir)) {
+    console.error(`Error: ~/.agents/ not initialized. Run 'vakt init' first.`);
+    process.exit(1);
+  }
+  return agentsDir;
+}
+
+function finishPull(result: PullResult, dryRun: boolean): void {
+  console.log("");
+  if (result.errors.length === 0 || result.fetched.length > 0) {
+    ok("Pull complete");
+    if (!dryRun) info("Run 'vakt sync' to apply updated config to all providers");
+  } else {
+    warn("Pull failed — check remote.url in config.json");
+    process.exit(1);
+  }
+  console.log("");
+}
+
+async function runPullCommand(opts: PullOpts): Promise<void> {
+  const agentsDir = ensureAgentsDirForPull();
+  let remoteCfg: RemoteCfg;
+  try {
+    remoteCfg = loadPullRemoteConfig();
+  } catch (e) {
+    console.error(`Error loading config: ${e instanceof Error ? e.message : String(e)}`);
+    process.exit(1);
+  }
+  const dryRun = opts.dryRun ?? false;
+  const what = resolvePullWhat(opts);
+  const result: PullResult = { fetched: [], errors: [] };
+
+  console.log("");
+  console.log(bold("vakt pull"));
+  if (dryRun) console.log(yellow("DRY RUN — no changes will be made"));
+  console.log("");
+
+  if (what === "all" || what === "policy") await fetchPolicyArtifact(remoteCfg, agentsDir, dryRun, result);
+  if (what === "all" || what === "mcp") await fetchMcpArtifact(remoteCfg, agentsDir, dryRun, result);
+  if (what === "all" || what === "skills") await fetchSkillsArtifact(remoteCfg, agentsDir, dryRun, result);
+
+  finishPull(result, dryRun);
+}
+
 export function registerPull(program: Command): void {
   program
     .command("pull")
@@ -67,49 +125,7 @@ export function registerPull(program: Command): void {
     .option("--policy-only", "only fetch policy.json")
     .option("--mcp-only", "only fetch mcp-config.json")
     .option("--skills-only", "only fetch skills/index.json")
-    .action(async (opts: { dryRun?: boolean; policyOnly?: boolean; mcpOnly?: boolean; skillsOnly?: boolean }) => {
-      const agentsDir = process.env["AGENTS_DIR"] ?? join(process.env["HOME"] ?? "~", ".agents");
-
-      if (!existsSync(agentsDir)) {
-        console.error(`Error: ~/.agents/ not initialized. Run 'vakt init' first.`);
-        process.exit(1);
-      }
-
-      let cfg;
-      try {
-        cfg = loadAgentConfig();
-      } catch (e) {
-        console.error(`Error loading config: ${e instanceof Error ? e.message : String(e)}`);
-        process.exit(1);
-      }
-
-      if (!cfg.remote?.url) {
-        console.error("No remote.url configured.");
-        console.error("Set it with: vakt config set remote.url https://github.com/org/agent-config");
-        process.exit(1);
-      }
-
-      console.log("");
-      console.log(bold("vakt pull"));
-      if (opts.dryRun) console.log(yellow("DRY RUN — no changes will be made"));
-      console.log("");
-
-      const remoteCfg = cfg.remote;
-      const what = resolvePullWhat(opts);
-      const result: PullResult = { fetched: [], errors: [] };
-
-      if (what === "all" || what === "policy") await fetchPolicyArtifact(remoteCfg, agentsDir, opts.dryRun ?? false, result);
-      if (what === "all" || what === "mcp") await fetchMcpArtifact(remoteCfg, agentsDir, opts.dryRun ?? false, result);
-      if (what === "all" || what === "skills") await fetchSkillsArtifact(remoteCfg, agentsDir, opts.dryRun ?? false, result);
-
-      console.log("");
-      if (result.errors.length === 0 || result.fetched.length > 0) {
-        ok("Pull complete");
-        if (!opts.dryRun) info("Run 'vakt sync' to apply updated config to all providers");
-      } else {
-        warn("Pull failed — check remote.url in config.json");
-        process.exit(1);
-      }
-      console.log("");
+    .action(async (opts: PullOpts) => {
+      await runPullCommand(opts);
     });
 }

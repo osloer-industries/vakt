@@ -16,7 +16,7 @@ WARNINGS=()
 
 # Load credential names from profile or environment
 CREDENTIAL_NAMES="${CREDENTIAL_NAMES:-}"
-if [ -f "$PROFILE_FILE" ] && [ -z "$CREDENTIAL_NAMES" ]; then
+if [[ -f "$PROFILE_FILE" ]] && [[ -z "$CREDENTIAL_NAMES" ]]; then
   CREDENTIAL_NAMES=$(grep -o '"[A-Z_]*"' "$PROFILE_FILE" | tr -d '"' | grep -v "^store$\|^service_name$\|^naming$" | tr '\n' ' ' || true)
   echo "Loaded profile from $PROFILE_FILE" >&2
 else
@@ -41,7 +41,7 @@ run_check() {
     local exit_code=$?
     local msg
     msg=$(cat /tmp/check-stderr-$$ | tail -1)
-    if [ $exit_code -eq 2 ]; then
+    if [[ $exit_code -eq 2 ]]; then
       WARNINGS+=("$check_name: $msg")
       echo "⚠ $check_name: $msg" >&2
     else
@@ -63,15 +63,15 @@ run_check "gitrepo"     "$CHECKS_DIR/check-gitrepo.sh"
 SCORE=100
 SCORE=$((SCORE - ${#FAILED[@]} * 25))
 SCORE=$((SCORE - ${#WARNINGS[@]} * 10))
-[ $SCORE -lt 0 ] && SCORE=0
+[[ $SCORE -lt 0 ]] && SCORE=0
 
 # Build JSON arrays
 to_json_array() {
   local json="["
   local first=true
   for item in "$@"; do
-    [ -z "$item" ] && continue
-    [ "$first" = false ] && json+=","
+    [[ -z "$item" ]] && continue
+    [[ "$first" = false ]] && json+=","
     json+="\"$(echo "$item" | sed 's/"/\\"/g')\""
     first=false
   done
@@ -95,4 +95,4 @@ echo "" >&2
 echo "Audit complete. Score: $SCORE/100" >&2
 echo "Report written to $OUTPUT_FILE" >&2
 
-[ ${#FAILED[@]} -eq 0 ]
+[[ ${#FAILED[@]} -eq 0 ]]

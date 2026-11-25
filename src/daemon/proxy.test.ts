@@ -4,6 +4,7 @@ import { tmpdir } from "os";
 import { join } from "path";
 import { createProxy } from "./proxy";
 import { AuditStore } from "../lib/audit";
+import { expectAt } from "../lib/test-assert";
 
 const DB = join(tmpdir(), `proxy-test-${process.pid}.db`);
 let savedAgentsDir: string | undefined;
@@ -87,8 +88,9 @@ describe("createProxy", () => {
     proxy.interceptRequest(toolCallFrame(3, "delete_repo"));
     const rows = store.query({ serverName: "github", limit: 10 });
     expect(rows).toHaveLength(1);
-    expect(rows[0]!.tool_name).toBe("delete_repo");
-    expect(rows[0]!.policy_result).toBe("deny");
+    const row = expectAt(rows, 0, "denied tool call");
+    expect(row.tool_name).toBe("delete_repo");
+    expect(row.policy_result).toBe("deny");
   });
 
   it("passes non-tools/call frames through unchanged", () => {
@@ -106,8 +108,9 @@ describe("createProxy", () => {
     proxy.recordAllowed("read_file", Date.now() - 10);
     const rows = store.query({ serverName: "fs", limit: 10 });
     expect(rows).toHaveLength(1);
-    expect(rows[0]!.tool_name).toBe("read_file");
-    expect(rows[0]!.policy_result).toBe("allow");
+    const row = expectAt(rows, 0, "allowed tool call");
+    expect(row.tool_name).toBe("read_file");
+    expect(row.policy_result).toBe("allow");
   });
 
   it("interceptResponse records allowed call when response arrives for tracked id", () => {
@@ -125,8 +128,9 @@ describe("createProxy", () => {
 
     const rows = store.query({ serverName: "github", limit: 10 });
     expect(rows).toHaveLength(1);
-    expect(rows[0]!.tool_name).toBe("list_repos");
-    expect(rows[0]!.policy_result).toBe("allow");
+    const row = expectAt(rows, 0, "intercepted tool call");
+    expect(row.tool_name).toBe("list_repos");
+    expect(row.policy_result).toBe("allow");
   });
 
   it("interceptResponse passes response bytes through unchanged", () => {
@@ -156,7 +160,7 @@ describe("createProxy", () => {
     const rows = store.query({ serverName: "github", limit: 10 });
     // only the deny entry from interceptRequest — no spurious allow
     expect(rows).toHaveLength(1);
-    expect(rows[0]!.policy_result).toBe("deny");
+    expect(expectAt(rows, 0, "denied intercept").policy_result).toBe("deny");
   });
 
   it("interceptResponse ignores responses with unknown ids", () => {

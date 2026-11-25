@@ -28,6 +28,9 @@ const OUTBOUND_NETWORK_PATTERNS = [
   /fetch\s+/i,
 ];
 
+const red = (s: string) => `\x1b[31m${s}\x1b[0m`;
+const yellow = (s: string) => `\x1b[33m${s}\x1b[0m`;
+
 /** Resolve a user-supplied plan path under the current working directory. */
 export function resolvePlanFilePath(file: string, cwd = process.cwd()): string {
   const absPath = resolve(cwd, file);
@@ -57,7 +60,11 @@ function toolMentionsInLine(line: string, stepNum: number, lineIndex: number): T
   const mentions: ToolMention[] = [];
   for (const { name, regex } of TOOL_PATTERNS) {
     if (regex.test(line)) {
-      mentions.push({ step, tool: name, args });
+      mentions.push({
+        step,
+        tool: name,
+        ...(args === undefined ? {} : { args }),
+      });
     }
   }
   return mentions;
@@ -135,9 +142,6 @@ export function validatePlanMentions(
 }
 
 export function formatPlanViolations(violations: PlanViolation[]): string {
-  const red = (s: string) => `\x1b[31m${s}\x1b[0m`;
-  const yellow = (s: string) => `\x1b[33m${s}\x1b[0m`;
-
   return violations.map(v => {
     const icon = v.severity === "error" ? red("✗") : yellow("⚠");
     const lines = [

@@ -53,7 +53,9 @@ export function assertOciReference(ref: string): void {
   }
   const last = segments.length - 1;
   for (let i = 0; i < segments.length; i++) {
-    validateOciSegment(segments[i]!, i === last, ref);
+    const segment = segments[i];
+    if (segment === undefined) continue;
+    validateOciSegment(segment, i === last, ref);
   }
 }
 
@@ -92,7 +94,8 @@ export function validatedOciReference(identifier: string): string {
   const last = segments.length - 1;
   const rebuiltSegments: string[] = [];
   for (let i = 0; i < segments.length; i++) {
-    const seg = segments[i]!;
+    const seg = segments[i];
+    if (seg === undefined) continue;
     validateOciSegment(seg, i === last, trimmed);
     rebuiltSegments.push(rebuildOciSegment(seg, i === last));
   }
