@@ -4,7 +4,7 @@ import { expandHome, loadProviders } from "./config";
 import { resolveProviderInstructionsPath } from "./instructions";
 import { HookConfigSchema, type HookConfig, type Policy, type ToolPermission } from "./schemas";
 import { serializeToolPermission } from "./permissions";
-import { parseJsonUnknown } from "./type-guards";
+import { isRecord, parseJsonUnknown, readString } from "./type-guards";
 
 const VAKT_MARKER_START = "<!-- BEGIN_VAKT_MANAGED -->";
 const VAKT_MARKER_END = "<!-- END_VAKT_MANAGED -->";
@@ -98,12 +98,7 @@ function updateAgentsMd(agentsMdPath: string, policyContext: string, dryRun: boo
 }
 
 function isEnoent(err: unknown): boolean {
-  return (
-    typeof err === "object" &&
-    err !== null &&
-    "code" in err &&
-    (err as { code: string }).code === "ENOENT"
-  );
+  return isRecord(err) && readString(err, "code") === "ENOENT";
 }
 
 function readUtf8IgnoringEnoent(path: string): string | null {

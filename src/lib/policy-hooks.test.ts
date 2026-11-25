@@ -229,7 +229,7 @@ describe("policy-hooks", () => {
       const policyWithEscapes: Policy = {
         ...mockPolicy,
         tools: {
-          allow: [{ tool: "Bash", specifier: String.raw`echo "trail\\"` }] as ToolPermission[],
+          allow: [{ tool: "Bash", specifier: String.raw`echo "trail\\"` }] satisfies ToolPermission[],
           deny: [],
         },
       };
