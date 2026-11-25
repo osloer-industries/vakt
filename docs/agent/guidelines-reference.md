@@ -67,8 +67,10 @@ if (!result.success) {
 
 ### TypeScript
 
-- `strict: true`, `noUncheckedIndexedAccess: true`
-- No `any`; use `unknown` + Zod
+- `strict: true`, `noUncheckedIndexedAccess: true`, `exactOptionalPropertyTypes: true`
+- No type escape hatches: Oxlint + ESLint block `any`, `@ts-ignore` / `@ts-nocheck` / bare `@ts-expect-error`, non-null `!`, type assertions (`as` / angle brackets), and double casts (`as unknown as`)
+- Allowed: `as const`, `satisfies`
+- No `any`; use `unknown` + Zod (or `isRecord` / small type guards at boundaries)
 - Named exports; no default exports except `src/index.ts`
 - Bun APIs (`Bun.file`, `Bun.spawn`, `Bun.write`) for async I/O
 - User-facing CLI errors; no raw stack traces at CLI level
@@ -201,7 +203,7 @@ Org-wide rules live in the **Agent workflow** block in `AGENTS.md`. Workflows un
 
 | Workflow | Role |
 |----------|------|
-| `ci.yml` | Org reusables + Bun quality jobs + docker/cross-platform e2e + Sonar aggregate `sonarcloud` |
+| `ci.yml` | Org reusables + Bun quality jobs + docker/cross-platform e2e + `sonar-analyze` / zero-issues |
 | `dependency-review.yml` | Org reusable |
 | `pr-title.yml` | Semantic PR titles |
 | `release.yml` | semantic-release + Homebrew formula |

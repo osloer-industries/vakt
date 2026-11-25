@@ -1,12 +1,27 @@
 import { describe, it, test, expect, beforeEach } from "bun:test";
 import { mkdirSync, writeFileSync, existsSync, readFileSync } from "fs";
 import { join } from "path";
-import { resolveServer, resolveAll, formatForProvider, writeJsonConfig, readTomlConfig, toToml, syncSkills, writeTomlConfig, toTomlArrayOfTables } from "./resolver";
+import {
+  resolveServer,
+  resolveAll,
+  formatForProvider,
+  writeJsonConfig,
+  readTomlConfig,
+  toToml,
+  syncSkills,
+  writeTomlConfig,
+  toTomlArrayOfTables,
+  isResolvedStdioServer,
+  isResolvedHttpServer,
+} from "./resolver";
+import { loadProviders } from "./config";
 import { secretsSet } from "./secrets";
-import type { Provider } from "./schemas";
+import type { McpConfig, McpServer, Provider } from "./schemas";
+import { expectDefined, expectEnv } from "./test-assert";
+import { isRecord, readString } from "./type-guards";
 
 // setup.ts sets AGENTS_SECRETS_BACKEND=env and AGENTS_DIR to a sandbox
-const AGENTS = process.env["AGENTS_DIR"]!;
+const AGENTS = expectEnv("AGENTS_DIR");
 
 beforeEach(() => {
   mkdirSync(AGENTS, { recursive: true });
@@ -19,7 +34,7 @@ describe("resolveServer — missing secrets", () => {
       { command: "npx", args: ["-y", "some-server"], env: { TOKEN: "secret:MISSING_TOKEN_XYZ" }, global: false },
       {},
     );
-    expect((resolved as any).env["TOKEN"]).toBe("secret:MISSING_TOKEN_XYZ");
+    expect(isResolvedStdioServer(resolved) ? resolved.env?.["TOKEN"] : undefined).toBe("secret:MISSING_TOKEN_XYZ");
     expect(missing).toContain("MISSING_TOKEN_XYZ");
   });
 
@@ -29,7 +44,7 @@ describe("resolveServer — missing secrets", () => {
       { command: "npx", env: { KEY: "secret:ALSO_MISSING_XYZ" }, global: false },
       {},
     );
-    expect((resolved as any).env["KEY"]).not.toBe("");
+    expect(isResolvedStdioServer(resolved) ? resolved.env?.["KEY"] : "").not.toBe("");
   });
 
   it("resolves env value when secret exists", async () => {
@@ -39,7 +54,7 @@ describe("resolveServer — missing secrets", () => {
       { command: "npx", env: { TOKEN: "secret:RESOLVER_TEST_TOKEN" }, global: false },
       {},
     );
-    expect((resolved as any).env["TOKEN"]).toBe("real-value");
+    expect(isResolvedStdioServer(resolved) ? resolved.env?.["TOKEN"] : undefined).toBe("real-value");
     expect(missing).toHaveLength(0);
   });
 
@@ -57,8 +72,8 @@ describe("resolveServer — missing secrets", () => {
       },
       {},
     );
-    expect((resolved as any).env["PRESENT"]).toBe("present-value");
-    expect((resolved as any).env["ABSENT"]).toBe("secret:RESOLVER_ABSENT_KEY");
+    expect(isResolvedStdioServer(resolved) ? resolved.env?.["PRESENT"] : undefined).toBe("present-value");
+    expect(isResolvedStdioServer(resolved) ? resolved.env?.["ABSENT"] : undefined).toBe("secret:RESOLVER_ABSENT_KEY");
     expect(missing).toContain("RESOLVER_ABSENT_KEY");
     expect(missing).not.toContain("RESOLVER_PRESENT_KEY");
   });
@@ -189,27 +204,25 @@ describe("writeTomlConfig — array format", () => {
 });
 
 
-// Helper — minimal provider fixture
-function makeProvider(structureOverrides: Record<string, unknown> = {}): Provider {
+// Helper — provider fixture based on the real cursor entry
+function makeProvider(structureOverrides: Partial<Provider["configStructure"]> = {}): Provider {
+  const base = expectDefined(loadProviders()["cursor"], "cursor provider");
   return {
-    name: "test-provider",
-    syncMethod: "file",
-    configFormat: "json",
-    serversPropertyName: "mcpServers",
-    configPath: { linux: "~/.test/mcp.json", darwin: "~/.test/mcp.json" },
-    isInstalled: { linux: "test-provider", darwin: "test-provider" },
+    ...base,
+    displayName: "Test Provider",
     configStructure: {
+      ...base.configStructure,
+      ...structureOverrides,
       stdioPropertyMapping: {
-        commandProperty: "command",
-        argsProperty: "args",
-        envProperty: "env",
+        ...base.configStructure.stdioPropertyMapping,
+        ...structureOverrides.stdioPropertyMapping,
       },
       httpPropertyMapping: {
-        urlProperty: "url",
+        ...base.configStructure.httpPropertyMapping,
+        ...structureOverrides.httpPropertyMapping,
       },
-      ...structureOverrides,
     },
-  } as unknown as Provider;
+  };
 }
 
 describe("resolveServer — HTTP", () => {
@@ -217,9 +230,10 @@ describe("resolveServer — HTTP", () => {
     const { server, missing } = await resolveServer("api", {
       transport: "http",
       url: "https://api.example.com/mcp",
-    } as any, {});
-    expect((server as any).url).toBe("https://api.example.com/mcp");
-    expect((server as any).transport).toBe("http");
+      global: false,
+    }, {});
+    expect(isResolvedHttpServer(server) ? server.url : undefined).toBe("https://api.example.com/mcp");
+    expect(isResolvedHttpServer(server) ? server.transport : undefined).toBe("http");
     expect(missing).toHaveLength(0);
   });
 
@@ -229,19 +243,21 @@ describe("resolveServer — HTTP", () => {
       transport: "http",
       url: "https://api.example.com/mcp",
       headers: { Authorization: "Bearer secret:API_KEY" },
-    } as any, {});
-    expect((server as any).headers?.["Authorization"]).toBe("Bearer tok-123");
+      global: false,
+    }, {});
+    expect(isResolvedHttpServer(server) ? server.headers?.["Authorization"] : undefined).toBe("Bearer tok-123");
   });
 });
 
 describe("resolveAll", () => {
   it("resolves multiple servers and collects missing secrets", async () => {
-    const config = {
-      ok:     { command: "npx", args: ["-y", "mcp-ok"] },
-      broken: { command: "npx", env: { TOKEN: "secret:MISSING_TOKEN_XYZ" } },
+    const config: McpConfig = {
+      ok: { command: "npx", args: ["-y", "mcp-ok"], global: false },
+      broken: { command: "npx", env: { TOKEN: "secret:MISSING_TOKEN_XYZ" }, global: false },
     };
-    const { resolved, allMissing } = await resolveAll(config as any, {});
-    expect((resolved["ok"] as any).command).toBe("npx");
+    const { resolved, allMissing } = await resolveAll(config, {});
+    const ok = expectDefined(resolved["ok"], "resolved ok");
+    expect(isResolvedStdioServer(ok) ? ok.command : undefined).toBe("npx");
     expect(allMissing["broken"]).toContain("MISSING_TOKEN_XYZ");
     expect(allMissing["ok"]).toBeUndefined();
   });
@@ -250,7 +266,7 @@ describe("resolveAll", () => {
 describe("formatForProvider", () => {
   it("maps stdio server command and args", () => {
     const result = formatForProvider(
-      { myserver: { command: "npx", args: ["-y", "mcp-test"], global: false } },
+      { myserver: { command: "npx", args: ["-y", "mcp-test"] } },
       makeProvider(),
     );
     expect(result["myserver"]?.["command"]).toBe("npx");
@@ -259,7 +275,7 @@ describe("formatForProvider", () => {
 
   it("maps HTTP server to urlProperty", () => {
     const result = formatForProvider(
-      { api: { transport: "http", url: "https://example.com/mcp" } as any },
+      { api: { transport: "http", url: "https://example.com/mcp" } },
       makeProvider(),
     );
     expect(result["api"]?.["url"]).toBe("https://example.com/mcp");
@@ -267,7 +283,7 @@ describe("formatForProvider", () => {
 
   it("merges command+args into one array when commandProperty === argsProperty", () => {
     const result = formatForProvider(
-      { s: { command: "npx", args: ["-y", "pkg"], global: false } },
+      { s: { command: "npx", args: ["-y", "pkg"] } },
       makeProvider({ stdioPropertyMapping: { commandProperty: "cmd", argsProperty: "cmd" } }),
     );
     expect(result["s"]?.["cmd"]).toEqual(["npx", "-y", "pkg"]);
@@ -275,7 +291,7 @@ describe("formatForProvider", () => {
 
   it("includes typeProperty when configured", () => {
     const result = formatForProvider(
-      { s: { command: "npx", global: false } },
+      { s: { command: "npx" } },
       makeProvider({
         stdioPropertyMapping: {
           commandProperty: "command",
@@ -290,7 +306,7 @@ describe("formatForProvider", () => {
 
   it("includes env when envProperty is configured", () => {
     const result = formatForProvider(
-      { s: { command: "npx", env: { TOKEN: "abc" }, global: false } },
+      { s: { command: "npx", env: { TOKEN: "abc" } } },
       makeProvider(),
     );
     expect(result["s"]?.["env"]).toEqual({ TOKEN: "abc" });
@@ -307,7 +323,8 @@ describe("readTomlConfig", () => {
     const path = join(AGENTS, "test.toml");
     writeFileSync(path, '[mcp]\nserver = "test"\n');
     const result = readTomlConfig(path);
-    expect((result["mcp"] as any)?.server).toBe("test");
+    const mcp = result["mcp"];
+    expect(isRecord(mcp) ? readString(mcp, "server") : undefined).toBe("test");
   });
 
   it("returns empty object on malformed TOML", () => {
@@ -344,8 +361,8 @@ describe("toToml", () => {
 
 describe("resolveServer strips global field", () => {
   test("global field is not included in resolved output", async () => {
-    const server = { command: "npx", args: ["-y", "test-mcp"], global: true };
-    const { server: resolved } = await resolveServer("test", server as any, {});
+    const server: McpServer = { command: "npx", args: ["-y", "test-mcp"], global: true };
+    const { server: resolved } = await resolveServer("test", server, {});
     expect("global" in resolved).toBe(false);
   });
 });

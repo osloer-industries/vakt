@@ -1,24 +1,12 @@
 const REGISTRY_BASE = "https://registry.modelcontextprotocol.io";
 
-interface RegistryPackage {
-  registryType: "npm" | "oci";
-  identifier: string;
-  version?: string;
-  runtimeHint?: string;
-  runtimeArguments?: Array<{ value: string }>;
-  packageArguments?: Array<{ value: string }>;
-  environmentVariables?: Array<{ name: string; isSecret?: boolean; isRequired?: boolean }>;
-}
+import {
+  RegistryEntrySchema,
+  RegistrySearchResponseSchema,
+  type RegistryEntry,
+} from "./schemas";
 
-export interface RegistryEntry {
-  server: {
-    name: string;
-    description?: string;
-    version?: string;
-    packages?: RegistryPackage[];
-    remotes?: Array<{ type: string; url: string }>;
-  };
-}
+export type { RegistryEntry };
 
 export interface ResolvedPackage {
   command: string;
@@ -35,7 +23,8 @@ export class RegistryClient {
     const res = await fetch(this.lookupUrl(id));
     if (res.status === 404) return null;
     if (!res.ok) throw new Error(`Registry ${res.status}: ${id}`);
-    return res.json() as Promise<RegistryEntry>;
+    const body: unknown = await res.json();
+    return RegistryEntrySchema.parse(body);
   }
 
   async search(query: string, limit = 10): Promise<RegistryEntry[]> {
@@ -43,7 +32,8 @@ export class RegistryClient {
       `${REGISTRY_BASE}/v0/servers?q=${encodeURIComponent(query)}&limit=${limit}`,
     );
     if (!res.ok) throw new Error(`Registry search failed: ${res.status}`);
-    const data = await res.json() as { servers?: RegistryEntry[] };
+    const body: unknown = await res.json();
+    const data = RegistrySearchResponseSchema.parse(body);
     return data.servers ?? [];
   }
 
@@ -75,6 +65,6 @@ export class RegistryClient {
       };
     }
 
-    throw new Error(`Unsupported registry type: ${pkg.registryType}`);
+    throw new Error(`Unsupported registry type: ${String(pkg.registryType)}`);
   }
 }

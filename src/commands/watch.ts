@@ -1,8 +1,9 @@
 import type { Command } from "commander";
 import { existsSync, mkdirSync, copyFileSync, appendFileSync } from "node:fs";
-import { join, dirname } from "node:path";
-import { spawnSync } from "node:child_process";
+import { join } from "node:path";
+import { requireExecutable, resolveExecutable } from "../lib/safe-exec";
 import { loadProviders } from "../lib/config";
+import { currentPlatformKey, platformStringPath } from "../lib/type-guards";
 
 const bold   = (s: string) => `\x1b[1m${s}\x1b[0m`;
 const green  = (s: string) => `\x1b[32m${s}\x1b[0m`;
@@ -12,11 +13,9 @@ const ok     = (s: string) => console.log(`  ${green("✓")}  ${s}`);
 const warn   = (s: string) => console.log(`  ${yellow("⚠")}  ${s}`);
 const err    = (s: string) => console.log(`  ${red("✗")}  ${s}`);
 
-const WHICH = "/usr/bin/which";
-
 function detectWatcher(): "fswatch" | "inotifywait" | null {
-  if (spawnSync(WHICH, ["fswatch"], { encoding: "utf-8" }).status === 0) return "fswatch";
-  if (spawnSync(WHICH, ["inotifywait"], { encoding: "utf-8" }).status === 0) return "inotifywait";
+  if (resolveExecutable("fswatch")) return "fswatch";
+  if (resolveExecutable("inotifywait")) return "inotifywait";
   return null;
 }
 
@@ -28,12 +27,11 @@ function resolveProviderPaths(home: string): string[] {
     return [];
   }
 
-  const plat = process.platform as "darwin" | "linux" | "win32";
+  const plat = currentPlatformKey();
   const paths: string[] = [];
 
   for (const provider of Object.values(providers)) {
-    const cp = provider.configPath;
-    const rawPath = typeof cp === "string" ? cp : (cp as Record<string, string>)[plat] ?? "";
+    const rawPath = platformStringPath(provider.configPath, plat);
     if (!rawPath) continue;
     const expanded = rawPath.replace(/^~/, home).replace(/\$HOME/g, home);
     if (existsSync(expanded)) paths.push(expanded);
@@ -76,8 +74,32 @@ function handleDriftEvent(
   }
 }
 
-async function runWatchLoop(
-  reader: ReadableStreamDefaultReader<Uint8Array>,
+function consumeWatchChunk(
+  buffer: string,
+  chunk: Uint8Array,
+  decoder: TextDecoder,
+  watchPaths: string[],
+  auditLog: string,
+  snapshotDir: string,
+  opts: { revert?: boolean },
+): string {
+  let next = buffer + decoder.decode(chunk);
+  const lines = next.split("\n");
+  next = lines.pop() ?? "";
+  for (const line of lines) {
+    const changedPath = line.trim();
+    if (!changedPath) continue;
+    handleDriftEvent(changedPath, watchPaths, auditLog, snapshotDir, opts);
+  }
+  return next;
+}
+
+type ByteStreamReader = {
+  read(): Promise<ReadableStreamReadResult<Uint8Array>>;
+};
+
+async function readWatchStream(
+  reader: ByteStreamReader,
   watchPaths: string[],
   auditLog: string,
   snapshotDir: string,
@@ -85,18 +107,17 @@ async function runWatchLoop(
 ): Promise<void> {
   const decoder = new TextDecoder();
   let buffer = "";
-  while (true) {
+
+  const pump = async (): Promise<void> => {
     const { value, done } = await reader.read();
-    if (done) break;
-    buffer += decoder.decode(value);
-    const lines = buffer.split("\n");
-    buffer = lines.pop() ?? "";
-    for (const line of lines) {
-      const changedPath = line.trim();
-      if (!changedPath) continue;
-      handleDriftEvent(changedPath, watchPaths, auditLog, snapshotDir, opts);
+    if (done) return;
+    if (value) {
+      buffer = consumeWatchChunk(buffer, value, decoder, watchPaths, auditLog, snapshotDir, opts);
     }
-  }
+    await pump();
+  };
+
+  await pump();
 }
 
 export function registerWatch(program: Command): void {
@@ -147,13 +168,10 @@ export function registerWatch(program: Command): void {
           ? ["--one-event", "--event=Updated", "--event=Created", "--event=Removed", ...watchPaths]
           : ["-m", "-r", ...watchPaths, "--event", "MODIFY,CREATE,DELETE"];
 
-      const proc = Bun.spawn([watcher, ...watchArgs], { stdout: "pipe", stderr: "pipe" });
+      const watcherBin = requireExecutable(watcher);
+      const proc = Bun.spawn([watcherBin, ...watchArgs], { stdout: "pipe", stderr: "pipe" });
       const auditLog = join(agentsDir, "audit.log");
 
-      await runWatchLoop(proc.stdout.getReader(), watchPaths, auditLog, snapshotDir, opts);
-
-      // Suppress unused variable warning
-      void ok;
-      void dirname;
+      await readWatchStream(proc.stdout.getReader(), watchPaths, auditLog, snapshotDir, opts);
     });
 }

@@ -14,8 +14,8 @@ CREDENTIAL_NAMES="${CREDENTIAL_NAMES:-}"
 OUTPUT="$HOME/.agents/credential-profile.json"
 
 # Auto-detect store if not specified
-if [ -z "$STORE" ]; then
-  if command -v security >/dev/null 2>&1 && [ "$(uname)" = "Darwin" ]; then
+if [[ -z "$STORE" ]]; then
+  if command -v security >/dev/null 2>&1 && [[ "$(uname)" = "Darwin" ]]; then
     STORE="keychain"
   elif command -v pass >/dev/null 2>&1; then
     STORE="pass"
@@ -39,7 +39,7 @@ done
 CREDS_JSON="["
 first=true
 for cred in $CREDENTIAL_NAMES; do
-  [ "$first" = false ] && CREDS_JSON+=","
+  [[ "$first" = false ]] && CREDS_JSON+=","
   CREDS_JSON+="\"$cred\""
   first=false
 done

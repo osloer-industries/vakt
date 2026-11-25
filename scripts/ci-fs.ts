@@ -1,4 +1,4 @@
-import { lstatSync, readdirSync, statSync, type Stats } from "node:fs";
+import { lstatSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 
 /** Directories excluded from repo-owned CI scans (vendor/build artifacts). */
@@ -15,7 +15,7 @@ export type WalkRepoFilesOptions = {
   readonly useLstat?: boolean;
 };
 
-function safeStat(path: string, useLstat: boolean): Stats | null {
+function safeStat(path: string, useLstat: boolean) {
   try {
     return useLstat ? lstatSync(path) : statSync(path);
   } catch {

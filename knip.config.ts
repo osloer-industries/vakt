@@ -1,17 +1,16 @@
 import type { KnipConfig } from "knip";
 
 const config: KnipConfig = {
-  // Stryker's command test runner is built into @stryker-mutator/core (no separate package).
-  ignore: ["stryker.config.mjs"],
   // entry inferred from package.json bin field (src/index.ts)
   // scripts/*.ts are standalone bun run scripts
   // test files are entry points for bun test
-  entry: ["scripts/*.ts", "src/**/*.test.ts"],
+  entry: ["scripts/*.ts", "src/**/*.test.ts", "src/lib/test-assert.ts"],
   project: ["src/**/*.ts", "scripts/**/*.ts"],
   ignoreBinaries: [
     "bats",   // system test runner, not a package
     "eslint", // called in scripts, provided by devDependency eslint
     "knip",   // called in scripts, provided by devDependency knip
+    "oxlint", // called in scripts, provided by devDependency oxlint
   ],
   // GitHub Actions plugin fails to parse multiline YAML strings in release.yml
   "github-actions": false,
@@ -23,6 +22,8 @@ const config: KnipConfig = {
     "@semantic-release/exec",
     "@semantic-release/github",
     "conventional-changelog-conventionalcommits",
+    "oxlint",
+    "oxlint-tsgolint",
   ],
 };
 

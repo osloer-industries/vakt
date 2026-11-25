@@ -1,15 +1,24 @@
 import { join, dirname } from "node:path";
 import { existsSync, mkdirSync, symlinkSync, readdirSync, readFileSync } from "node:fs";
-import { z } from "zod";
 import { parse as parseToml } from "smol-toml";
 import type { McpConfig, McpServer, Provider, StdioServer, HttpServer } from "./schemas";
-import { McpServerSchema } from "./schemas";
+import { isRecord, parseJsonUnknown } from "./type-guards";
 import { expandPaths } from "./config";
 import { resolveSecretRefs } from "./secrets";
 import { isSkillGlobal } from "./skills";
 
-export type ResolvedServer = Omit<z.infer<typeof McpServerSchema>, 'global'>;
+export type ResolvedHttpServer = Omit<HttpServer, "global">;
+export type ResolvedStdioServer = Omit<StdioServer, "global">;
+export type ResolvedServer = ResolvedHttpServer | ResolvedStdioServer;
 export type ResolvedConfig = Record<string, ResolvedServer>;
+
+export function isResolvedHttpServer(server: ResolvedServer): server is ResolvedHttpServer {
+  return "transport" in server && server.transport === "http";
+}
+
+export function isResolvedStdioServer(server: ResolvedServer): server is ResolvedStdioServer {
+  return "command" in server;
+}
 
 export async function resolveServer(
   _name: string,
@@ -26,24 +35,27 @@ export async function resolveServer(
   }
 
   async function resolveRecord(rec: Record<string, string>): Promise<Record<string, string>> {
-    const out: Record<string, string> = {};
-    for (const [k, v] of Object.entries(rec)) out[k] = await resolveValue(v);
-    return out;
+    const pairs = await Promise.all(
+      Object.entries(rec).map(async ([k, v]) => [k, await resolveValue(v)] as const),
+    );
+    return Object.fromEntries(pairs);
   }
 
   if ("transport" in server && server.transport === "http") {
-    const s = server as HttpServer;
     return {
       server: {
         transport: "http",
-        url: await resolveValue(s.url),
-        ...(s.headers ? { headers: await resolveRecord(s.headers) } : {}),
+        url: await resolveValue(server.url),
+        ...(server.headers ? { headers: await resolveRecord(server.headers) } : {}),
       },
       missing,
     };
   }
 
-  const s = server as StdioServer;
+  if (!("command" in server)) {
+    throw new Error("Invalid MCP server configuration");
+  }
+  const s = server;
   return {
     server: {
       command: s.command,
@@ -59,10 +71,15 @@ export async function resolveAll(
   config: McpConfig,
   paths: Record<string, string>
 ): Promise<{ resolved: ResolvedConfig; allMissing: Record<string, string[]> }> {
+  const pairs = await Promise.all(
+    Object.entries(config).map(async ([name, server]) => {
+      const { server: r, missing } = await resolveServer(name, server, paths);
+      return { name, r, missing };
+    }),
+  );
   const resolved: ResolvedConfig = {};
   const allMissing: Record<string, string[]> = {};
-  for (const [name, server] of Object.entries(config)) {
-    const { server: r, missing } = await resolveServer(name, server, paths);
+  for (const { name, r, missing } of pairs) {
     resolved[name] = r;
     if (missing.length > 0) allMissing[name] = missing;
   }
@@ -72,7 +89,10 @@ export async function resolveAll(
 type HttpMapping = NonNullable<Provider["configStructure"]["httpPropertyMapping"]>;
 type StdioMapping = NonNullable<Provider["configStructure"]["stdioPropertyMapping"]>;
 
-function formatHttpServer(s: HttpServer, hm: HttpMapping): Record<string, unknown> {
+function formatHttpServer(
+  s: Pick<HttpServer, "transport" | "url" | "headers">,
+  hm: HttpMapping,
+): Record<string, unknown> {
   const out: Record<string, unknown> = {};
   if (hm.typeProperty && hm.typeValue) out[hm.typeProperty] = hm.typeValue;
   if (hm.urlProperty) out[hm.urlProperty] = s.url;
@@ -80,7 +100,10 @@ function formatHttpServer(s: HttpServer, hm: HttpMapping): Record<string, unknow
   return out;
 }
 
-function formatStdioServer(s: StdioServer, sm: StdioMapping): Record<string, unknown> {
+function formatStdioServer(
+  s: Pick<StdioServer, "command" | "args" | "env" | "cwd">,
+  sm: StdioMapping,
+): Record<string, unknown> {
   const out: Record<string, unknown> = {};
   if (sm.typeProperty && sm.typeValue) out[sm.typeProperty] = sm.typeValue;
   if (sm.commandProperty && sm.commandProperty === sm.argsProperty) {
@@ -100,10 +123,20 @@ function formatServer(
   provider: Provider
 ): Record<string, unknown> {
   const { stdioPropertyMapping: sm, httpPropertyMapping: hm } = provider.configStructure;
-  const isHttp = "transport" in server && (server as HttpServer).transport === "http";
-  if (isHttp && hm) return formatHttpServer(server as HttpServer, hm);
-  if (!isHttp && sm) return formatStdioServer(server as StdioServer, sm);
-  return server as unknown as Record<string, unknown>;
+  if (isResolvedHttpServer(server)) {
+    if (hm) return formatHttpServer(server, hm);
+    return { transport: "http", url: server.url, ...(server.headers ? { headers: server.headers } : {}) };
+  }
+  if (isResolvedStdioServer(server)) {
+    if (sm) return formatStdioServer(server, sm);
+    return {
+      command: server.command,
+      ...(server.args?.length ? { args: server.args } : {}),
+      ...(server.env ? { env: server.env } : {}),
+      ...(server.cwd ? { cwd: server.cwd } : {}),
+    };
+  }
+  return {};
 }
 
 export function formatForProvider(
@@ -123,7 +156,8 @@ export async function writeJsonConfig(
 ): Promise<void> {
   let existing: Record<string, unknown> = {};
   if (existsSync(filePath)) {
-    existing = JSON.parse(await Bun.file(filePath).text());
+    const raw = parseJsonUnknown(await Bun.file(filePath).text());
+    existing = isRecord(raw) ? raw : {};
   }
   existing[serversKey] = servers;
   const content = JSON.stringify(existing, null, 2) + "\n";
@@ -135,7 +169,10 @@ export async function writeJsonConfig(
 
 export function readTomlConfig(filePath: string): Record<string, unknown> {
   if (!existsSync(filePath)) return {};
-  try { return parseToml(readFileSync(filePath, "utf-8")) as Record<string, unknown>; }
+  try {
+    const parsed: unknown = parseToml(readFileSync(filePath, "utf-8"));
+    return isRecord(parsed) ? parsed : {};
+  }
   catch { return {}; }
 }
 
@@ -145,12 +182,16 @@ export function toToml(data: Record<string, unknown>, _indent = 0): string {
     if (typeof v === "string") lines.push(`${k} = ${JSON.stringify(v)}`);
     else if (typeof v === "number" || typeof v === "boolean") lines.push(`${k} = ${v}`);
     else if (Array.isArray(v)) lines.push(`${k} = ${JSON.stringify(v)}`);
-    else if (v && typeof v === "object") {
-      lines.push(`\n[${k}]`);
-      lines.push(toToml(v as Record<string, unknown>));
+    else if (isRecord(v)) {
+      lines.push(`\n[${k}]`, toToml(v));
     }
   }
   return lines.join("\n");
+}
+
+function isStringRecord(value: unknown): value is Record<string, string> {
+  if (!isRecord(value)) return false;
+  return Object.values(value).every((entry) => typeof entry === "string");
 }
 
 /** Serialise a flat string-valued record as a TOML inline table: { k = "v", ... } */
@@ -181,7 +222,9 @@ export function toTomlArrayOfTables(
         if (typeof v === "string") lines.push(`${k} = ${JSON.stringify(v)}`);
         else if (typeof v === "number" || typeof v === "boolean") lines.push(`${k} = ${v}`);
         else if (Array.isArray(v)) lines.push(`${k} = ${JSON.stringify(v)}`);
-        else if (v && typeof v === "object") lines.push(`${k} = ${toTomlInlineTable(v as Record<string, string>)}`);
+        else if (isStringRecord(v)) {
+          lines.push(`${k} = ${toTomlInlineTable(v)}`);
+        }
       }
       return lines.join("\n");
     })
@@ -231,6 +274,27 @@ export function isIgnoredSkillEntry(entry: string): boolean {
   return entry.startsWith(".") || SYSTEM_FILES.has(entry);
 }
 
+function linkOneSkill(
+  entry: string,
+  skillsSource: string,
+  skillsTarget: string,
+  dryRun: boolean,
+  globalOnly: boolean,
+): { kind: "linked" | "skipped" | "error"; message: string } | null {
+  const src = join(skillsSource, entry);
+  if (globalOnly && !isSkillGlobal(src)) return null;
+  const dest = join(skillsTarget, entry);
+  if (existsSync(dest)) return { kind: "skipped", message: entry };
+  if (dryRun) return { kind: "linked", message: `[dry-run] Would link: ${entry}` };
+  try {
+    symlinkSync(src, dest);
+    return { kind: "linked", message: entry };
+  } catch (e) {
+    const detail = e instanceof Error ? e.message : String(e);
+    return { kind: "error", message: `${entry}: ${detail}` };
+  }
+}
+
 export function syncSkills(
   skillsSource: string,
   skillsTarget: string,
@@ -244,18 +308,13 @@ export function syncSkills(
   if (!existsSync(skillsSource)) return { linked, skipped, errors };
   if (!dryRun) mkdirSync(skillsTarget, { recursive: true });
 
-  const entries = readdirSync(skillsSource).filter(e => !isIgnoredSkillEntry(e));
+  const entries = readdirSync(skillsSource).filter((e) => !isIgnoredSkillEntry(e));
   for (const entry of entries) {
-    const dest = join(skillsTarget, entry);
-    const src = join(skillsSource, entry);
-    if (globalOnly && !isSkillGlobal(src)) continue;
-    if (existsSync(dest)) { skipped.push(entry); continue; }
-    if (dryRun) {
-      linked.push(`[dry-run] Would link: ${entry}`);
-    } else {
-      try { symlinkSync(src, dest); linked.push(entry); }
-      catch (e) { errors.push(`${entry}: ${e}`); }
-    }
+    const result = linkOneSkill(entry, skillsSource, skillsTarget, dryRun, globalOnly);
+    if (result === null) continue;
+    if (result.kind === "linked") linked.push(result.message);
+    else if (result.kind === "skipped") skipped.push(result.message);
+    else errors.push(result.message);
   }
   return { linked, skipped, errors };
 }

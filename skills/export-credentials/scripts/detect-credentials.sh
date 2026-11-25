@@ -17,8 +17,8 @@ SERVICE_NAME="${SERVICE_NAME:-credentials}"
 OUTPUT_FILE="${OUTPUT_FILE:-.detected-credentials.json}"
 
 # Detect platform and credential store if auto
-if [ "$STORE" = "auto" ]; then
-  if command -v security >/dev/null 2>&1 && [ "$(uname)" = "Darwin" ]; then
+if [[ "$STORE" = "auto" ]]; then
+  if command -v security >/dev/null 2>&1 && [[ "$(uname)" = "Darwin" ]]; then
     STORE="keychain"
     echo "Auto-detected: macOS Keychain" >&2
   elif command -v pass >/dev/null 2>&1; then
@@ -45,7 +45,7 @@ case "$STORE" in
     fi
     ACCOUNTS=$(security find-generic-password -s "$SERVICE_NAME" 2>/dev/null | grep "acct" | cut -d'"' -f4 || true)
     for account in $ACCOUNTS; do
-      if [ "$first" = false ]; then
+      if [[ "$first" = false ]]; then
         DETECTED+=","
       fi
       DETECTED+="{\"name\":\"$account\",\"available\":true,\"store\":\"keychain\"}"
@@ -61,10 +61,10 @@ case "$STORE" in
       echo "ℹ Install with: sudo apt install pass (Ubuntu) or brew install pass (macOS)" >&2
       exit 1
     fi
-    if [ -d "$HOME/.password-store" ]; then
+    if [[ -d "$HOME/.password-store" ]]; then
       ENTRIES=$(find "$HOME/.password-store" -name "*.gpg" | sed "s|$HOME/.password-store/||;s|\.gpg$||" || true)
       for entry in $ENTRIES; do
-        if [ "$first" = false ]; then
+        if [[ "$first" = false ]]; then
           DETECTED+=","
         fi
         DETECTED+="{\"name\":\"$entry\",\"available\":true,\"store\":\"pass\"}"
@@ -79,10 +79,10 @@ case "$STORE" in
     # User should specify which env vars are credentials
     echo "ℹ Environment variables are already available" >&2
     echo "Specify credential names via environment: CREDENTIAL_NAMES=\"KEY1 KEY2 KEY3\"" >&2
-    if [ -n "${CREDENTIAL_NAMES:-}" ]; then
+    if [[ -n "${CREDENTIAL_NAMES:-}" ]]; then
       for cred in $CREDENTIAL_NAMES; do
-        if [ -n "${!cred:-}" ]; then
-          if [ "$first" = false ]; then
+        if [[ -n "${!cred:-}" ]]; then
+          if [[ "$first" = false ]]; then
             DETECTED+=","
           fi
           DETECTED+="{\"name\":\"$cred\",\"available\":true,\"store\":\"env\"}"

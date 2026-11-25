@@ -3,9 +3,10 @@ import { mkdirSync, writeFileSync } from "fs";
 import { join } from "path";
 import { loadMcpConfig, loadAgentConfig, expandPaths, expandHome, loadProviders, resolveProviderConfigPath } from "./config";
 import { AgentConfigSchema } from "./schemas";
+import { expectDefined, expectEnv } from "./test-assert";
 
 // AGENTS_DIR is set by setup.ts preload — points to a sandboxed tmp directory
-const AGENTS = process.env["AGENTS_DIR"]!;
+const AGENTS = expectEnv("AGENTS_DIR");
 
 beforeEach(() => {
   mkdirSync(AGENTS, { recursive: true });
@@ -22,7 +23,8 @@ describe("loadMcpConfig", () => {
       JSON.stringify({ github: { command: "npx", args: ["-y", "@modelcontextprotocol/server-github"] } }),
     );
     const cfg = loadMcpConfig();
-    expect((cfg["github"] as any).command).toBe("npx");
+    const github = expectDefined(cfg["github"], "github");
+    expect("command" in github ? github.command : undefined).toBe("npx");
   });
 
   it("throws on malformed JSON", () => {
@@ -85,7 +87,7 @@ describe("loadProviders", () => {
 
   it("each provider has a syncMethod", () => {
     const providers = loadProviders();
-    for (const [name, p] of Object.entries(providers)) {
+    for (const [, p] of Object.entries(providers)) {
       expect(["file", "cli"]).toContain(p.syncMethod);
     }
   });

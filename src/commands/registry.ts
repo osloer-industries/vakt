@@ -1,11 +1,15 @@
 import type { Command } from "commander";
 import { existsSync, mkdirSync } from "node:fs";
-import { join } from "node:path";
-import { spawnSync } from "node:child_process";
+import { dirname, join } from "node:path";
 import { loadAgentConfig } from "../lib/config";
 import { SkillsIndexSchema, type SkillsIndexEntry } from "../lib/schemas";
 import { verifyPackage } from "../lib/verify";
-import { requireExecutable, safeSpawnEnv } from "../lib/safe-exec";
+import {
+  assertSafeSkillName,
+  resolveWritableFileUnderRoots,
+  userPathRoots,
+} from "../lib/safe-input";
+import { cloneRegistrySkill } from "../lib/git-clone";
 
 const bold   = (s: string) => `\x1b[1m${s}\x1b[0m`;
 const green  = (s: string) => `\x1b[32m${s}\x1b[0m`;
@@ -26,7 +30,7 @@ async function fetchIndex(indexUrl: string, token?: string): Promise<SkillsIndex
       console.error(`Error fetching skills index: HTTP ${resp.status}`);
       return null;
     }
-    const raw = await resp.json();
+    const raw: unknown = await resp.json();
     const parsed = SkillsIndexSchema.safeParse(raw);
     if (!parsed.success) {
       console.error(`Invalid skills index format: ${parsed.error.issues[0]?.message}`);
@@ -49,14 +53,19 @@ function searchSkills(skills: SkillsIndexEntry[], query: string): SkillsIndexEnt
   );
 }
 
-function installSkill(entry: SkillsIndexEntry, targetDir: string): boolean {
-  const dest = join(targetDir, entry.name);
+function installSkill(entry: SkillsIndexEntry, agentsDir: string): boolean {
+  const roots = userPathRoots(agentsDir);
+  const boundedTarget = dirname(
+    resolveWritableFileUnderRoots(join(agentsDir, "skills", ".vakt-registry-marker"), roots),
+  );
+  const safeName = assertSafeSkillName(entry.name);
+  const dest = join(boundedTarget, safeName);
   if (existsSync(dest)) {
     warn(`'${entry.name}' already installed at ${dest}`);
     info(`To update: rm -rf ${dest} && vakt registry skills install ${entry.name}`);
     return false;
   }
-  mkdirSync(targetDir, { recursive: true });
+  mkdirSync(boundedTarget, { recursive: true });
 
   if (entry.type === "git") {
     if (!entry.url.startsWith("https://")) {
@@ -64,13 +73,9 @@ function installSkill(entry: SkillsIndexEntry, targetDir: string): boolean {
       return false;
     }
     info(`Cloning ${entry.name} from ${entry.url}...`);
-    const git = requireExecutable("git");
-    const r = spawnSync(git, ["clone", "--depth", "1", entry.url, dest], {
-      encoding: "utf-8",
-      stdio: "inherit",
-      env: safeSpawnEnv(),
-    });
-    if (r.status !== 0) {
+    try {
+      cloneRegistrySkill(entry.url, entry.name, agentsDir);
+    } catch {
       console.error(`Failed to clone ${entry.name}`);
       return false;
     }
@@ -174,8 +179,7 @@ export function registerRegistry(program: Command): void {
       } else {
         warn(`supply-chain verification skipped: ${vResult.reason}`);
       }
-      const targetDir = join(agentsDir, "skills");
-      const installed = installSkill(entry, targetDir);
+      const installed = installSkill(entry, agentsDir);
       if (!installed) process.exit(1);
       info("Run 'vakt sync --skills-only' to link this skill to all providers");
     });
