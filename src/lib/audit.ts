@@ -2,6 +2,16 @@ import { Database } from "bun:sqlite";
 import { mkdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { AGENTS_DIR } from "./config";
+import {
+  RoutingEventRowSchema,
+  SandboxSessionRowSchema,
+  SyncEventRowSchema,
+  ToolCallRowSchema,
+  type RoutingEventRow,
+  type SandboxSessionRow,
+  type SyncEventRow,
+  type ToolCallRow,
+} from "./schemas";
 
 export function defaultAuditDbPath(): string {
   return join(AGENTS_DIR, "audit.db");
@@ -31,6 +41,25 @@ export interface ToolCallRecord {
   endedAt: number;
   responseOk: boolean;
   errorCode?: string;
+}
+
+function parseRows<T>(schema: { parse: (raw: unknown) => T }, rows: unknown): T[] {
+  if (!Array.isArray(rows)) return [];
+  return rows.map((row) => schema.parse(row));
+}
+
+function sandboxSessionFromRow(row: SandboxSessionRow): SandboxSession {
+  return {
+    id: row.id,
+    provider: row.provider,
+    container_id: row.container_id,
+    image: row.image,
+    repo: row.repo,
+    name: row.name,
+    status: row.status,
+    created_at: row.created_at,
+    closed_at: row.closed_at,
+  };
 }
 
 export class AuditStore {
@@ -111,16 +140,17 @@ export class AuditStore {
     );
   }
 
-  query(opts: { serverName?: string; since?: number; limit?: number } = {}): any[] {
+  query(opts: { serverName?: string; since?: number; limit?: number } = {}): ToolCallRow[] {
     const conds: string[] = [];
     const params: import("bun:sqlite").SQLQueryBindings[] = [];
     if (opts.serverName) { conds.push("server_name = ?"); params.push(opts.serverName); }
     if (opts.since)      { conds.push("started_at >= ?"); params.push(opts.since); }
     const where = conds.length ? `WHERE ${conds.join(" AND ")}` : "";
     params.push(opts.limit ?? 100);
-    return this.db.prepare(
+    const rows = this.db.prepare(
       `SELECT * FROM tool_calls ${where} ORDER BY started_at DESC LIMIT ?`
-    ).all(...params) as any[];
+    ).all(...params);
+    return parseRows(ToolCallRowSchema, rows);
   }
 
   recordSync(r: { providers: string[]; servers: string[]; dryRun: boolean }): void {
@@ -129,10 +159,11 @@ export class AuditStore {
     ).run(Date.now(), JSON.stringify(r.providers), JSON.stringify(r.servers), r.dryRun ? 1 : 0);
   }
 
-  recentSyncs(limit: number): any[] {
-    return this.db.prepare(
+  recentSyncs(limit: number): SyncEventRow[] {
+    const rows = this.db.prepare(
       "SELECT * FROM sync_events ORDER BY synced_at DESC LIMIT ?"
-    ).all(limit) as any[];
+    ).all(limit);
+    return parseRows(SyncEventRowSchema, rows);
   }
 
   createSession(opts: {
@@ -152,20 +183,22 @@ export class AuditStore {
   }
 
   getSession(id: string): SandboxSession | null {
-    return this.db.prepare(
+    const row = this.db.prepare(
       "SELECT * FROM sandbox_sessions WHERE id = ?"
-    ).get(id) as SandboxSession | null;
+    ).get(id);
+    if (row === null || row === undefined) return null;
+    return sandboxSessionFromRow(SandboxSessionRowSchema.parse(row));
   }
 
   listSessions(opts: { status?: string } = {}): SandboxSession[] {
-    if (opts.status) {
-      return this.db.prepare(
-        "SELECT * FROM sandbox_sessions WHERE status = ? ORDER BY created_at DESC"
-      ).all(opts.status) as SandboxSession[];
-    }
-    return this.db.prepare(
-      "SELECT * FROM sandbox_sessions ORDER BY created_at DESC"
-    ).all() as SandboxSession[];
+    const rows = opts.status
+      ? this.db.prepare(
+          "SELECT * FROM sandbox_sessions WHERE status = ? ORDER BY created_at DESC"
+        ).all(opts.status)
+      : this.db.prepare(
+          "SELECT * FROM sandbox_sessions ORDER BY created_at DESC"
+        ).all();
+    return parseRows(SandboxSessionRowSchema, rows).map(sandboxSessionFromRow);
   }
 
   closeSession(id: string): void {
@@ -199,9 +232,10 @@ export class AuditStore {
     );
   }
 
-  recentRoutingEvents(limit: number): any[] {
-    return this.db.prepare(
+  recentRoutingEvents(limit: number): RoutingEventRow[] {
+    const rows = this.db.prepare(
       "SELECT * FROM routing_events ORDER BY routed_at DESC LIMIT ?"
-    ).all(limit) as any[];
+    ).all(limit);
+    return parseRows(RoutingEventRowSchema, rows);
   }
 }

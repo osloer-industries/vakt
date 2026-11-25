@@ -2,7 +2,8 @@ import { describe, it, expect, beforeEach, afterEach } from "bun:test";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync, readFileSync, symlinkSync, existsSync, readlinkSync, lstatSync } from "node:fs";
 import { join } from "node:path";
 import { ensureProviderAgentsMd, resolveProviderInstructionsPath } from "../../src/lib/instructions";
-import type { Provider } from "../../src/lib/schemas";
+import { loadProviders } from "../../src/lib/config";
+import { expectDefined } from "../../src/lib/test-assert";
 
 describe("ensureProviderAgentsMd", () => {
   let tmp: string;
@@ -54,13 +55,7 @@ describe("ensureProviderAgentsMd", () => {
 
 describe("resolveProviderInstructionsPath", () => {
   it("returns expanded platform path", () => {
-    const provider = {
-      id: "codex",
-      instructions: {
-        path: { linux: "$HOME/.codex/AGENTS.md" },
-        method: "symlink",
-      },
-    } as unknown as Provider;
+    const provider = expectDefined(loadProviders()["codex"], "codex provider");
     const prev = process.platform;
     Object.defineProperty(process, "platform", { value: "linux" });
     const path = resolveProviderInstructionsPath(provider);

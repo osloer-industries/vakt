@@ -52,10 +52,11 @@ function extractToolMentions(planText: string): ToolMention[] {
     for (const { name, regex } of TOOL_PATTERNS) {
       if (regex.test(line)) {
         const argsMatch = /\(([^)]*)\)/.exec(line);
+        const args = argsMatch?.[1];
         mentions.push({
           step: stepNum || i + 1,
           tool: name,
-          args: argsMatch?.[1],
+          ...(args === undefined ? {} : { args }),
         });
       }
     }

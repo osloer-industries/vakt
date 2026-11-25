@@ -16,139 +16,60 @@ concurrency:
 
 jobs:
   workflow-security:
-    uses: osloer-industries/.github/.github/workflows/workflow-security.yml@348b254ef112f4f8e239a41e7adb3f3e2dac3944 # v0.1.6
+    uses: osloer-industries/.github/.github/workflows/workflow-security.yml@a6ee91211fd9ba096ec141bacdb67985a82b6767 # v0.1.7
     permissions:
       contents: read
       actions: read
 
-  build-check:
-    uses: osloer-industries/.github/.github/workflows/node-npm-quality.yml@348b254ef112f4f8e239a41e7adb3f3e2dac3944 # v0.1.6
+  build:
+    uses: osloer-industries/.github/.github/workflows/node-npm-quality.yml@a6ee91211fd9ba096ec141bacdb67985a82b6767 # v0.1.7
     with:
       package-manager: bun
       job-name: build
       check-npm-script: ci:build
       timeout-minutes: 15
 
-  build:
-    name: build
-    needs: [build-check]
-    if: always()
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    permissions:
-      contents: read
-    steps:
-      - name: Aggregate build gate
-        env:
-          CHECK_RESULT: ${{ needs.build-check.result }}
-        run: |
-          set -euo pipefail
-          if [ "${CHECK_RESULT}" != "success" ]; then
-            echo "::error::build-check result was ${CHECK_RESULT}; expected success"
-            exit 1
-          fi
-          echo "Build gate passed."
-
-  lint-check:
-    uses: osloer-industries/.github/.github/workflows/node-npm-quality.yml@348b254ef112f4f8e239a41e7adb3f3e2dac3944 # v0.1.6
+  lint:
+    uses: osloer-industries/.github/.github/workflows/node-npm-quality.yml@a6ee91211fd9ba096ec141bacdb67985a82b6767 # v0.1.7
     with:
       package-manager: bun
       job-name: lint
       check-npm-script: ci:lint
 
-  lint:
-    name: lint
-    needs: [lint-check]
-    if: always()
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    permissions:
-      contents: read
-    steps:
-      - name: Aggregate lint gate
-        env:
-          CHECK_RESULT: ${{ needs.lint-check.result }}
-        run: |
-          set -euo pipefail
-          if [ "${CHECK_RESULT}" != "success" ]; then
-            echo "::error::lint-check result was ${CHECK_RESULT}; expected success"
-            exit 1
-          fi
-          echo "Lint gate passed."
-
-  test-check:
-    uses: osloer-industries/.github/.github/workflows/node-npm-quality.yml@348b254ef112f4f8e239a41e7adb3f3e2dac3944 # v0.1.6
+  test:
+    uses: osloer-industries/.github/.github/workflows/node-npm-quality.yml@a6ee91211fd9ba096ec141bacdb67985a82b6767 # v0.1.7
     with:
       package-manager: bun
       job-name: test
       check-npm-script: ci:test
 
-  test:
-    name: test
-    needs: [test-check]
-    if: always()
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    permissions:
-      contents: read
-    steps:
-      - name: Aggregate test gate
-        env:
-          CHECK_RESULT: ${{ needs.test-check.result }}
-        run: |
-          set -euo pipefail
-          if [ "${CHECK_RESULT}" != "success" ]; then
-            echo "::error::test-check result was ${CHECK_RESULT}; expected success"
-            exit 1
-          fi
-          echo "Test gate passed."
-
-  security-check:
-    uses: osloer-industries/.github/.github/workflows/node-npm-quality.yml@348b254ef112f4f8e239a41e7adb3f3e2dac3944 # v0.1.6
+  security:
+    uses: osloer-industries/.github/.github/workflows/node-npm-quality.yml@a6ee91211fd9ba096ec141bacdb67985a82b6767 # v0.1.7
     with:
       package-manager: bun
       job-name: security
       check-npm-script: ci:security
 
-  security:
-    name: security
-    needs: [security-check]
-    if: always()
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    permissions:
-      contents: read
-    steps:
-      - name: Aggregate security gate
-        env:
-          CHECK_RESULT: ${{ needs.security-check.result }}
-        run: |
-          set -euo pipefail
-          if [ "${CHECK_RESULT}" != "success" ]; then
-            echo "::error::security-check result was ${CHECK_RESULT}; expected success"
-            exit 1
-          fi
-          echo "Security gate passed."
-
   mutation:
-    uses: osloer-industries/.github/.github/workflows/mutation-changed.yml@348b254ef112f4f8e239a41e7adb3f3e2dac3944 # v0.1.6
+    uses: osloer-industries/.github/.github/workflows/mutation-changed.yml@a6ee91211fd9ba096ec141bacdb67985a82b6767 # v0.1.7
     with:
       package-manager: bun
+      bun-version-file: .bun-version
       full-npm-script: test:mutation
-      timeout-minutes: 20
+      timeout-minutes: 10
 
   agents-md-lint:
-    uses: osloer-industries/.github/.github/workflows/agents-md-lint.yml@348b254ef112f4f8e239a41e7adb3f3e2dac3944 # v0.1.6
+    uses: osloer-industries/.github/.github/workflows/agents-md-lint.yml@a6ee91211fd9ba096ec141bacdb67985a82b6767 # v0.1.7
 
   codeql:
-    uses: osloer-industries/.github/.github/workflows/codeql-javascript-typescript.yml@348b254ef112f4f8e239a41e7adb3f3e2dac3944 # v0.1.6
+    uses: osloer-industries/.github/.github/workflows/codeql-javascript-typescript.yml@a6ee91211fd9ba096ec141bacdb67985a82b6767 # v0.1.7
     permissions:
       contents: read
       actions: read
       security-events: write
 
-  sonar-scan:
-    uses: osloer-industries/.github/.github/workflows/sonarqube-cloud-node.yml@348b254ef112f4f8e239a41e7adb3f3e2dac3944 # v0.1.6
+  sonar-analyze:
+    uses: osloer-industries/.github/.github/workflows/sonarqube-cloud-node.yml@a6ee91211fd9ba096ec141bacdb67985a82b6767 # v0.1.7
     permissions:
       contents: read
       pull-requests: read
@@ -161,51 +82,13 @@ jobs:
 
   sonar-zero-open-issues:
     if: github.event_name == 'pull_request'
-    needs: sonar-scan
-    uses: osloer-industries/.github/.github/workflows/sonarcloud-zero-issues.yml@348b254ef112f4f8e239a41e7adb3f3e2dac3944 # v0.1.6
+    needs: sonar-analyze
+    uses: osloer-industries/.github/.github/workflows/sonarcloud-zero-issues.yml@a6ee91211fd9ba096ec141bacdb67985a82b6767 # v0.1.7
     with:
       project-key: tn819_agentctl
-      ce-task-id: ${{ needs.sonar-scan.outputs.ce-task-id }}
+      ce-task-id: ${{ needs.sonar-analyze.outputs.ce-task-id }}
     secrets:
       SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-
-  sonarcloud:
-    name: sonarcloud
-    needs:
-      - sonar-scan
-      - sonar-zero-open-issues
-    if: always()
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    permissions:
-      contents: read
-    steps:
-      - name: Aggregate Sonar scan and zero-issues gates
-        env:
-          SCAN_RESULT: ${{ needs.sonar-scan.result }}
-          ZERO_RESULT: ${{ needs.sonar-zero-open-issues.result }}
-        run: |
-          set -euo pipefail
-          if [ "${SCAN_RESULT}" != "success" ]; then
-            echo "::error::sonar-scan result was ${SCAN_RESULT}; expected success"
-            exit 1
-          fi
-          case "${ZERO_RESULT}" in
-            success)
-              echo "Sonar scan and zero-issues gates passed."
-              ;;
-            skipped)
-              if [ "${GITHUB_EVENT_NAME}" = "pull_request" ]; then
-                echo "::error::sonar-zero-open-issues was skipped on pull_request"
-                exit 1
-              fi
-              echo "Sonar scan passed; zero-issues skipped on ${GITHUB_EVENT_NAME}."
-              ;;
-            *)
-              echo "::error::sonar-zero-open-issues result was ${ZERO_RESULT}; expected success or skipped"
-              exit 1
-              ;;
-          esac
 
   docker-e2e:
     runs-on: ubuntu-latest
@@ -365,10 +248,9 @@ jobs:
       - test-macos
       - test-linux
       - codeql
-      - sonar-scan
-      - sonarcloud
+      - sonar-analyze
       - sonar-zero-open-issues
     if: always()
-    uses: osloer-industries/.github/.github/workflows/ci-passed.yml@348b254ef112f4f8e239a41e7adb3f3e2dac3944 # v0.1.6
+    uses: osloer-industries/.github/.github/workflows/ci-passed.yml@a6ee91211fd9ba096ec141bacdb67985a82b6767 # v0.1.7
     with:
       needs-json: ${{ toJSON(needs) }}

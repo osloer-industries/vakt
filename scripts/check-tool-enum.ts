@@ -48,7 +48,8 @@ function extractToolNames(html: string): Set<string> {
   const found = new Set<string>();
 
   for (const match of text.matchAll(TOOL_NAME_RE)) {
-    const name = match[1]!;
+    const name = match[1];
+    if (name === undefined) continue;
     if (!FALSE_POSITIVES.has(name)) found.add(name);
   }
 
@@ -59,8 +60,8 @@ function extractToolNames(html: string): Set<string> {
 
 function diff(known: readonly string[], found: Set<string>): { added: string[]; removed: string[] } {
   const knownSet = new Set(known);
-  const added   = [...found].filter((t) => !knownSet.has(t)).sort((a, b) => a.localeCompare(b));
-  const removed = [...known].filter((t) => !found.has(t)).sort((a, b) => a.localeCompare(b));
+  const added = [...found].filter((t) => !knownSet.has(t)).toSorted((a, b) => a.localeCompare(b));
+  const removed = [...known].filter((t) => !found.has(t)).toSorted((a, b) => a.localeCompare(b));
   return { added, removed };
 }
 
@@ -72,7 +73,7 @@ async function main(): Promise<void> {
   try {
     html = await fetchDocs();
   } catch (e) {
-    console.error(`\n⚠  Could not fetch docs: ${e}`);
+    console.error(`\n⚠  Could not fetch docs: ${e instanceof Error ? e.message : String(e)}`);
     console.error("   Skipping tool enum check (network unavailable).");
     process.exit(0); // Don't fail CI on network errors
   }

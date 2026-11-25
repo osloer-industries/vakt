@@ -18,9 +18,9 @@ async function runProcess(
   opts: { cwd?: string; env?: Record<string, string>; timeoutMs?: number; stdin?: string },
 ): Promise<{ stdout: string; stderr: string; exitCode: number }> {
   const proc = Bun.spawn(argv, {
-    cwd: opts.cwd,
-    env: opts.env ? { ...process.env, ...opts.env } : undefined,
-    stdin: opts.stdin === undefined ? undefined : new Blob([opts.stdin]),
+    ...(opts.cwd === undefined ? {} : { cwd: opts.cwd }),
+    ...(opts.env === undefined ? {} : { env: { ...process.env, ...opts.env } }),
+    ...(opts.stdin === undefined ? {} : { stdin: new Blob([opts.stdin]) }),
     stdout: "pipe",
     stderr: "pipe",
   });
@@ -52,26 +52,29 @@ export async function isRtkAvailable(): Promise<boolean> {
 export async function rtkWrap(options: RtkWrapOptions): Promise<RtkWrapResult> {
   const { command, args = [], cwd, env, timeoutMs } = options;
 
-  if (!(await isRtkAvailable())) {
-    const fallback = await runProcess([command, ...args], { cwd, env, timeoutMs });
-    return { ...fallback, tokenSavings: undefined };
+  const runOpts = {
+    ...(cwd === undefined ? {} : { cwd }),
+    ...(env === undefined ? {} : { env }),
+    ...(timeoutMs === undefined ? {} : { timeoutMs }),
+  };
+
+  if (await isRtkAvailable()) {
+    const wrapped = await runProcess(["rtk", "wrap", "--", command, ...args], runOpts);
+    const tokenSavings = parseTokenSavings(wrapped.stderr);
+    return {
+      ...wrapped,
+      ...(tokenSavings === undefined ? {} : { tokenSavings }),
+    };
   }
 
-  const wrapped = await runProcess(["rtk", "wrap", "--", command, ...args], {
-    cwd,
-    env,
-    timeoutMs,
-  });
-
-  return {
-    ...wrapped,
-    tokenSavings: parseTokenSavings(wrapped.stderr),
-  };
+  return runProcess([command, ...args], runOpts);
 }
 
 function parseTokenSavings(stderr: string): number | undefined {
   const match = /\[rtk\] Saved (\d+) tokens/.exec(stderr);
-  return match ? Number.parseInt(match[1]!, 10) : undefined;
+  const digits = match?.[1];
+  if (digits === undefined) return undefined;
+  return Number.parseInt(digits, 10);
 }
 
 /** Compress text via RTK or a basic deduplication fallback. */

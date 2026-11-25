@@ -18,6 +18,7 @@ setup_test_env() {
   export VAKT_TEST_MODE=1
   local _vakt_extra="/tmp"
   [[ -n "${TMPDIR:-}" ]] && _vakt_extra="${_vakt_extra}:${TMPDIR}"
+  _vakt_extra="${_vakt_extra}:${SANDBOX_HOME}"
   export VAKT_EXTRA_PATH_ROOTS="$_vakt_extra"
 }
 

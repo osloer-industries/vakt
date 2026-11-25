@@ -1,5 +1,6 @@
 import type { Command } from "commander";
 import { loadAgentConfig } from "../lib/config";
+import type { ModelRouter } from "../lib/schemas";
 import { buildSignals, selectBackend } from "../lib/router";
 import { AuditStore } from "../lib/audit";
 import { resolveSecretRefs } from "../lib/secrets";
@@ -21,12 +22,19 @@ export function registerRoute(program: Command): void {
     .option("--tools <number>", "Test: simulate tool count")
     .option("--has-code", "Test: simulate code detection")
     .option("--has-math", "Test: simulate math detection")
-    .action(async (opts) => {
+    .action(async (opts: {
+      test?: boolean;
+      port?: string;
+      tokens?: string;
+      tools?: string;
+      hasCode?: boolean;
+      hasMath?: boolean;
+    }) => {
       const config = loadAgentConfig();
       const routerConfig = config.modelRouter;
       
       if (opts.test) {
-        await testRouting(config, opts);
+        testRouting(config, opts);
         return;
       }
       
@@ -102,8 +110,8 @@ export function registerRoute(program: Command): void {
             toolCount: signals.toolCount,
             hasCode: signals.hasCode,
             hasMath: signals.hasMath,
-            matchedRule: result.matchedRule,
             latencyMs,
+            ...(result.matchedRule === undefined ? {} : { matchedRule: result.matchedRule }),
           });
           
           let apiKey: string | undefined;
@@ -135,7 +143,9 @@ export function registerRoute(program: Command): void {
             });
           } catch (err) {
             return new Response(
-              JSON.stringify({ error: `Backend error: ${err}` }),
+              JSON.stringify({
+                error: `Backend error: ${err instanceof Error ? err.message : String(err)}`,
+              }),
               { status: 502, headers: { "Content-Type": "application/json" } }
             );
           }
@@ -149,10 +159,10 @@ export function registerRoute(program: Command): void {
     });
 }
 
-async function testRouting(
-  config: { modelRouter?: { port: number; backends?: Record<string, { url: string }>; rules?: any[] } },
+function testRouting(
+  config: { modelRouter?: ModelRouter },
   opts: { tokens?: string; tools?: string; hasCode?: boolean; hasMath?: boolean }
-): Promise<void> {
+): void {
   console.log(bold("Testing routing logic...\n"));
   
   const routerConfig = config.modelRouter;
