@@ -225,6 +225,20 @@ describe("policy-hooks", () => {
       expect(content).toContain('"hookSpecificOutput"');
     });
 
+    it("escapes backslashes and quotes in hook JSON output", () => {
+      const policyWithEscapes: Policy = {
+        ...mockPolicy,
+        tools: {
+          allow: [{ tool: "Bash", specifier: String.raw`echo "trail\\"` }] satisfies ToolPermission[],
+          deny: [],
+        },
+      };
+
+      const result = syncHookProvider("claude", policyWithEscapes, false);
+      const content = readFileSync(result.path, "utf-8");
+      expect(content).toContain(String.raw`echo \"trail\\\\\"`);
+    });
+
     it("creates hook script for Gemini", () => {
       const result = syncHookProvider("gemini", mockPolicy, false);
 
@@ -252,7 +266,8 @@ describe("policy-hooks", () => {
 
       const content = readFileSync(result.path, "utf-8");
       expect(content).toContain("#!/bin/bash");
-      expect(content).toContain("echo");
+      expect(content).toContain("cat <<'HOOK_EOF'");
+      expect(content).toContain("[vakt policy]");
     });
 
     it("removes hook when policy has no tools", () => {
