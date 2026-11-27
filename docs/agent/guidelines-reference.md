@@ -68,7 +68,7 @@ if (!result.success) {
 ### TypeScript
 
 - `strict: true`, `noUncheckedIndexedAccess: true`, `exactOptionalPropertyTypes: true`
-- No type escape hatches: Oxlint + ESLint block `any`, every `@ts-*` comment, non-null `!`, definite assignment `x!:`, type assertions (`as` / angle brackets; not `as const` / `satisfies`), and double casts (`as unknown as`) — production, tests, and tooling, with no file overrides.
+- No type escape hatches: Oxlint + ESLint block `any`, every `@ts-*` comment, non-null `!`, definite assignment `x!:`, type assertions (`as` / angle brackets; not `as const` / `satisfies`), and double casts (`as unknown as`) — production, tests, and tooling, with no file overrides. Fix recipes: see the table in [`AGENTS.md` Non-negotiables](../../AGENTS.md#non-negotiables).
 - No `any`; use `unknown` + Zod (or `isRecord` / small type guards at boundaries)
 - Named exports; no default exports except `src/index.ts`
 - Bun APIs (`Bun.file`, `Bun.spawn`, `Bun.write`) for async I/O
