@@ -196,6 +196,23 @@ jobs:
           set -euo pipefail
           git remote set-url origin "https://x-access-token:${GH_TOKEN}@github.com/${{ github.repository }}.git"
           BRANCH="chore/formula-${VERSION}"
+          TITLE="chore(release): update homebrew formula to ${VERSION}"
+
+          # Older automated formula PRs edit the same file. If a newer release lands
+          # first (common when auto-merge waits on checks), stale PRs conflict forever.
+          gh pr list --state open --limit 50 --json number,title \
+            --jq '.[] | select(.title | startswith("chore(release): update homebrew formula to ")) | "\(.number)\t\(.title)"' |
+          while IFS="$(printf '\t')" read -r pr_num pr_title; do
+            old_ver="${pr_title#chore(release): update homebrew formula to }"
+            if [ "$old_ver" = "${VERSION}" ]; then
+              continue
+            fi
+            if [ "$(printf '%s\n%s' "$old_ver" "${VERSION}" | sort -V | head -n1)" = "$old_ver" ]; then
+              gh pr close "$pr_num" --comment \
+                "Superseded by automated formula update for v${VERSION}. Closing to avoid a perpetual \`Formula/vakt.rb\` conflict with \`main\`."
+            fi
+          done
+
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git checkout -b "$BRANCH"
@@ -203,11 +220,15 @@ jobs:
           git commit -m "chore(release): update homebrew formula to ${VERSION}"
           git push --force origin "$BRANCH"
           BODY="Automated formula update for release v${VERSION}.\n\nUpdates \`Formula/vakt.rb\` with the correct version and SHA-256 checksums for the published binaries.\n\n_This PR was opened automatically by the release workflow._"
-          gh pr create \
-            --title "chore(release): update homebrew formula to ${VERSION}" \
-            --body "$(printf '%b' "$BODY")" \
-            --base main \
-            --head "$BRANCH"
+          if gh pr view "$BRANCH" --json number --jq .number >/dev/null 2>&1; then
+            echo "Formula PR already open for ${BRANCH}"
+          else
+            gh pr create \
+              --title "${TITLE}" \
+              --body "$(printf '%b' "$BODY")" \
+              --base main \
+              --head "$BRANCH"
+          fi
           # Requires 'Allow auto-merge' enabled in repo Settings → General → Pull Requests.
           if ! gh pr merge "$BRANCH" --squash --auto --delete-branch; then
             echo "Formula PR remains open (auto-merge disabled or checks pending)."
