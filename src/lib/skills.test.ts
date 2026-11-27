@@ -1,6 +1,7 @@
 import { describe, test, expect } from "bun:test";
 import { writeFileSync, readFileSync, mkdirSync, mkdtempSync, rmSync } from "node:fs";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { spawnSync } from "node:child_process";
 import { isSkillGlobal, isSkillClassified, isGitRepo, assertSafePath, fetchAndCheckSkill, setSkillGlobal, pullSkill, parseSkillFrontmatter, scanSkillHazards } from "./skills";
 
@@ -41,7 +42,7 @@ describe("isSkillGlobal", () => {
 describe("isGitRepo", () => {
   test("returns true for a real git repo", () => {
     // The project root is a git repo — use the worktree
-    const projectRoot = new URL("../../", import.meta.url).pathname;
+    const projectRoot = join(dirname(fileURLToPath(import.meta.url)), "../..");
     expect(isGitRepo(projectRoot)).toBe(true);
   });
 

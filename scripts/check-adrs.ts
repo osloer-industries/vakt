@@ -4,9 +4,10 @@
  * Run: bun run scripts/check-adrs.ts
  */
 import { readdirSync, readFileSync } from "node:fs";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 
-const ADR_DIR = join(import.meta.dir, "..", "docs", "adr");
+const ADR_DIR = join(dirname(fileURLToPath(import.meta.url)), "..", "docs", "adr");
 const REQUIRED_SECTIONS = ["## Context", "## Decision", "## Alternatives Considered", "## Consequences"];
 const VALID_STATUSES    = ["proposed", "accepted", "deprecated", "superseded"];
 

@@ -85,6 +85,18 @@ bun run ci:build && bun run ci:lint && bun run ci:test && bun run ci:security
 - Type escape hatches are banned (see
   [guidelines-reference](docs/agent/guidelines-reference.md#typescript)); fix violations with real types, guards, or
   Zod — never silence lint.
+
+  | Instead of | Do |
+  | --- | --- |
+  | `JSON.parse(s) as T`, `res.json() as T` | `Schema.parse(...)` / `safeParse` (Zod) |
+  | `x as Foo` to narrow a union | a type guard, `in` / discriminant checks, or exhaustive `switch` |
+  | `{} as Config` for a partial build | build the full object, or type `Partial<Config>` and validate |
+  | `value as unknown as T` in tests | typed fixture builders; see `src/lib/test-assert.ts` (`expectDefined`, `expectAt`) |
+  | `arr[0]!`, `map.get(k)!` | destructure and guard; in tests use `expectDefined(v)` then use `v` |
+  | `el as HTMLInputElement` (DOM) | `if (el instanceof HTMLInputElement)` |
+  | `any` | `unknown` + narrowing, generics, or a schema |
+  | `@ts-expect-error` in tests for invalid input | build the bad input as `unknown` and pass it through the real parser |
+  | `x!: T` class field | constructor initialisation or `T \| undefined` with narrowing |
 - When you add or change a command, update the feature catalog in `docs/agent/guidelines-reference.md` and
   `src/vakt.sh`.
 

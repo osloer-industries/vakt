@@ -7,7 +7,6 @@ import unicorn from "eslint-plugin-unicorn";
 /** @type {import("eslint").Linter.Config[]} */
 export default [
   {
-    // Only lint production source — test files excluded
     files: ["src/**/*.ts"],
     ignores: ["src/**/*.test.ts", "dist/**"],
     plugins: {
@@ -23,8 +22,6 @@ export default [
     },
     rules: {
       // ── SonarCloud S3776: Cognitive Complexity ────────────────────────────
-      // Matches the SonarCloud threshold; catches overly complex functions
-      // before they reach CI.
       "sonarjs/cognitive-complexity": ["error", 15],
 
       // ── SonarCloud S1940: No negated condition as primary branch ─────────
@@ -37,7 +34,6 @@ export default [
       "sonarjs/no-identical-functions": "error",
 
       // ── SonarCloud S6594: Prefer RegExp.exec() over String.match() ───────
-      // Requires type info; only triggers when return value matters.
       "@typescript-eslint/prefer-regexp-exec": "error",
 
       // ── SonarCloud S2138 equiv: Number.parseInt / Number.isNaN ───────────
@@ -61,29 +57,52 @@ export default [
       // ── SonarCloud S7744: No useless fallback in spread (e.g. ?? {}) ─────
       "unicorn/no-useless-fallback-in-spread": "error",
 
-      // ── TypeScript escape hatches (org template parity) ───────────────────
-      "@typescript-eslint/no-explicit-any": "error",
-      "@typescript-eslint/ban-ts-comment": [
-        "error",
-        {
-          "ts-expect-error": "allow-with-description",
-          "ts-ignore": true,
-          "ts-nocheck": true,
-          "ts-check": false,
-          "minimumDescriptionLength": 10,
-        },
-      ],
-      "@typescript-eslint/no-non-null-assertion": "error",
-      "@typescript-eslint/consistent-type-assertions": ["error", { assertionStyle: "never" }],
       "@typescript-eslint/no-unsafe-assignment": "error",
       "@typescript-eslint/no-unsafe-call": "error",
       "@typescript-eslint/no-unsafe-member-access": "error",
       "@typescript-eslint/no-unsafe-return": "error",
       "@typescript-eslint/no-unsafe-argument": "error",
       "@typescript-eslint/no-unused-vars": ["error", { argsIgnorePattern: "^_" }],
-      // ── Bun compiled-binary safety + double-cast ban ──────────────────────
+    },
+  },
+  // Blanket type-escape ban (org template #121) — MUST stay last so nothing overrides it.
+  {
+    files: ["**/*.ts", "**/*.tsx", "**/*.mts", "**/*.cts"],
+    ignores: ["dist/**", "node_modules/**", "coverage/**"],
+    plugins: {
+      "@typescript-eslint": tseslint,
+    },
+    languageOptions: {
+      parser: tsparser,
+      parserOptions: {
+        project: "./tsconfig.json",
+      },
+    },
+    rules: {
+      "@typescript-eslint/no-explicit-any": "error",
+      "@typescript-eslint/no-non-null-assertion": "error",
+      "@typescript-eslint/consistent-type-assertions": ["error", { assertionStyle: "never" }],
+      "@typescript-eslint/ban-ts-comment": [
+        "error",
+        {
+          "ts-ignore": true,
+          "ts-nocheck": true,
+          "ts-expect-error": true,
+          "ts-check": false,
+        },
+      ],
       "no-restricted-syntax": [
         "error",
+        {
+          selector: "PropertyDefinition[definite=true]",
+          message:
+            "Definite-assignment `!:` hides an uninitialised value. Initialise it, make it optional and narrow, or restructure.",
+        },
+        {
+          selector: "VariableDeclarator[definite=true]",
+          message:
+            "Definite-assignment `!:` hides an uninitialised value. Initialise it, make it optional and narrow, or restructure.",
+        },
         {
           selector: "TSAsExpression > TSAsExpression",
           message:

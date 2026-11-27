@@ -31,9 +31,11 @@ ciExecFile(BunBin, ["x", "oxlint", "-c", ".oxlintrc.json", "src", "scripts", "te
   pathPrefix: toolPathPrefix,
 });
 
-ciExecFile(BunBin, ["x", "eslint", "src/", "--ignore-pattern", "**/*.test.ts"], {
-  pathPrefix: toolPathPrefix,
-});
+ciExecFile(
+  BunBin,
+  ["x", "eslint", "src", "scripts", "tests", "--report-unused-disable-directives-severity", "error"],
+  { pathPrefix: toolPathPrefix },
+);
 
 runCountSuppressionsCli(import.meta.url, []);
 

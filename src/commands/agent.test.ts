@@ -1,10 +1,11 @@
 import { describe, it, expect } from "bun:test";
 import { spawnSync } from "bun";
-import { join } from "path";
+import { dirname, join } from "path";
+import { fileURLToPath } from "url";
 import { mkdtempSync, rmSync } from "fs";
 import { tmpdir } from "os";
 
-const AGENTCTL = join(import.meta.dir, "../vakt.sh");
+const AGENTCTL = join(dirname(fileURLToPath(import.meta.url)), "../vakt.sh");
 
 function run(...args: string[]) {
   const tmp = mkdtempSync(join(tmpdir(), "vakt-test-"));
