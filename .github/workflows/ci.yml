@@ -16,13 +16,13 @@ concurrency:
 
 jobs:
   workflow-security:
-    uses: osloer-industries/.github/.github/workflows/workflow-security.yml@a6ee91211fd9ba096ec141bacdb67985a82b6767 # v0.1.7
+    uses: osloer-industries/.github/.github/workflows/workflow-security.yml@a8a5a86a440228a743f0d2be6c683643e5ace478 # v0.1.8
     permissions:
       contents: read
       actions: read
 
   build:
-    uses: osloer-industries/.github/.github/workflows/node-npm-quality.yml@a6ee91211fd9ba096ec141bacdb67985a82b6767 # v0.1.7
+    uses: osloer-industries/.github/.github/workflows/node-npm-quality.yml@a8a5a86a440228a743f0d2be6c683643e5ace478 # v0.1.8
     with:
       package-manager: bun
       job-name: build
@@ -30,28 +30,28 @@ jobs:
       timeout-minutes: 15
 
   lint:
-    uses: osloer-industries/.github/.github/workflows/node-npm-quality.yml@a6ee91211fd9ba096ec141bacdb67985a82b6767 # v0.1.7
+    uses: osloer-industries/.github/.github/workflows/node-npm-quality.yml@a8a5a86a440228a743f0d2be6c683643e5ace478 # v0.1.8
     with:
       package-manager: bun
       job-name: lint
       check-npm-script: ci:lint
 
   test:
-    uses: osloer-industries/.github/.github/workflows/node-npm-quality.yml@a6ee91211fd9ba096ec141bacdb67985a82b6767 # v0.1.7
+    uses: osloer-industries/.github/.github/workflows/node-npm-quality.yml@a8a5a86a440228a743f0d2be6c683643e5ace478 # v0.1.8
     with:
       package-manager: bun
       job-name: test
       check-npm-script: ci:test
 
   security:
-    uses: osloer-industries/.github/.github/workflows/node-npm-quality.yml@a6ee91211fd9ba096ec141bacdb67985a82b6767 # v0.1.7
+    uses: osloer-industries/.github/.github/workflows/node-npm-quality.yml@a8a5a86a440228a743f0d2be6c683643e5ace478 # v0.1.8
     with:
       package-manager: bun
       job-name: security
       check-npm-script: ci:security
 
   mutation:
-    uses: osloer-industries/.github/.github/workflows/mutation-changed.yml@a6ee91211fd9ba096ec141bacdb67985a82b6767 # v0.1.7
+    uses: osloer-industries/.github/.github/workflows/mutation-changed.yml@a8a5a86a440228a743f0d2be6c683643e5ace478 # v0.1.8
     with:
       package-manager: bun
       bun-version-file: .bun-version
@@ -59,17 +59,17 @@ jobs:
       timeout-minutes: 10
 
   agents-md-lint:
-    uses: osloer-industries/.github/.github/workflows/agents-md-lint.yml@a6ee91211fd9ba096ec141bacdb67985a82b6767 # v0.1.7
+    uses: osloer-industries/.github/.github/workflows/agents-md-lint.yml@a8a5a86a440228a743f0d2be6c683643e5ace478 # v0.1.8
 
   codeql:
-    uses: osloer-industries/.github/.github/workflows/codeql-javascript-typescript.yml@a6ee91211fd9ba096ec141bacdb67985a82b6767 # v0.1.7
+    uses: osloer-industries/.github/.github/workflows/codeql-javascript-typescript.yml@a8a5a86a440228a743f0d2be6c683643e5ace478 # v0.1.8
     permissions:
       contents: read
       actions: read
       security-events: write
 
   sonar-analyze:
-    uses: osloer-industries/.github/.github/workflows/sonarqube-cloud-node.yml@a6ee91211fd9ba096ec141bacdb67985a82b6767 # v0.1.7
+    uses: osloer-industries/.github/.github/workflows/sonarqube-cloud-node.yml@a8a5a86a440228a743f0d2be6c683643e5ace478 # v0.1.8
     permissions:
       contents: read
       pull-requests: read
@@ -83,7 +83,7 @@ jobs:
   sonar-zero-open-issues:
     if: github.event_name == 'pull_request'
     needs: sonar-analyze
-    uses: osloer-industries/.github/.github/workflows/sonarcloud-zero-issues.yml@a6ee91211fd9ba096ec141bacdb67985a82b6767 # v0.1.7
+    uses: osloer-industries/.github/.github/workflows/sonarcloud-zero-issues.yml@a8a5a86a440228a743f0d2be6c683643e5ace478 # v0.1.8
     with:
       project-key: tn819_agentctl
       ce-task-id: ${{ needs.sonar-analyze.outputs.ce-task-id }}
@@ -251,6 +251,6 @@ jobs:
       - sonar-analyze
       - sonar-zero-open-issues
     if: always()
-    uses: osloer-industries/.github/.github/workflows/ci-passed.yml@a6ee91211fd9ba096ec141bacdb67985a82b6767 # v0.1.7
+    uses: osloer-industries/.github/.github/workflows/ci-passed.yml@a8a5a86a440228a743f0d2be6c683643e5ace478 # v0.1.8
     with:
       needs-json: ${{ toJSON(needs) }}
