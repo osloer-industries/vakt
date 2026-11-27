@@ -48,6 +48,7 @@ Thumbs.db
 
 # Temporary files
 *.tmp
+scripts/gate-self-*/
 *.temp
 *.log
 *.bak

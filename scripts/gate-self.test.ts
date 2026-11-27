@@ -1,12 +1,14 @@
 import { spawnSync } from "node:child_process";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { expect, test, describe } from "bun:test";
 
-const repoRoot = resolve(import.meta.dir, "..");
+const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const oxlintConfig = join(repoRoot, ".oxlintrc.json");
 const oxlintExecutable = join(repoRoot, "node_modules", ".bin", "oxlint");
+const eslintExecutable = join(repoRoot, "node_modules", ".bin", "eslint");
 
 type CommandResult = {
   status: number;
@@ -49,8 +51,29 @@ function runOxlintOnFile(filePath: string): CommandResult {
   return execCommand(oxlintExecutable, ["-c", oxlintConfig, filePath], repoRoot);
 }
 
+function runEslintOnFile(filePath: string): CommandResult {
+  return execCommand(
+    eslintExecutable,
+    [filePath, "--report-unused-disable-directives-severity", "error"],
+    repoRoot,
+  );
+}
+
 function writeTempOxlintSource(source: string, fileName: string): { filePath: string; cleanup: () => void } {
   const tempDir = mkdtempSync(join(tmpdir(), "gate-self-ox-"));
+  const filePath = join(tempDir, fileName);
+  writeFileSync(filePath, source, "utf8");
+  return {
+    filePath,
+    cleanup: () => {
+      rmSync(tempDir, { recursive: true, force: true });
+    },
+  };
+}
+
+/** ESLint flat config only lints files under the repo base path (not system tmpdir). */
+function writeTempEslintSource(source: string, fileName: string): { filePath: string; cleanup: () => void } {
+  const tempDir = mkdtempSync(join(repoRoot, "scripts", "gate-self-"));
   const filePath = join(tempDir, fileName);
   writeFileSync(filePath, source, "utf8");
   return {
@@ -115,6 +138,26 @@ describe("gate self-tests (allowed type constructs)", () => {
     try {
       const result = runOxlintOnFile(filePath);
       expect(result.status).toBe(0);
+    } finally {
+      cleanup();
+    }
+  });
+});
+
+const consistentTypeAssertionsEslintRule = "@typescript-eslint/consistent-type-assertions";
+
+describe("gate self-tests (eslint escape hatches)", () => {
+  test.each([
+    ["upcast as", 'export const widened = "x" as string;\n', consistentTypeAssertionsEslintRule],
+    [
+      "definite-assignment field",
+      "export class Holder {\n  value!: number;\n}\n",
+      "no-restricted-syntax",
+    ],
+  ] as const)("rejects %s", (_label, source, ruleId) => {
+    const { filePath, cleanup } = writeTempEslintSource(source, "eslint-probe.ts");
+    try {
+      assertLintReportsRule(runEslintOnFile(filePath), ruleId);
     } finally {
       cleanup();
     }

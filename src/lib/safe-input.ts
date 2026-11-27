@@ -1,7 +1,6 @@
 import { existsSync, mkdirSync, readFileSync, realpathSync, statSync } from "node:fs";
 import { basename, dirname, join, relative, resolve, sep } from "node:path";
 import { homedir } from "node:os";
-import { AGENTS_DIR } from "./config";
 
 /** Strip control characters for safe terminal/log output (log injection). */
 export function sanitizeForLog(value: string): string {
@@ -172,11 +171,6 @@ export function resolveWritableFileUnderRoots(userPath: string, allowedRoots: re
   const target = join(cur, fileName);
   assertSafePath(target);
   return target;
-}
-
-/** Resolve a writable file under default vakt path roots ({@link userPathRoots}). */
-export function resolveBoundedWritableFile(userPath: string): string {
-  return resolveWritableFileUnderRoots(userPath, userPathRoots(AGENTS_DIR));
 }
 
 /** Resolve a user-supplied path to an absolute, existing directory under allowed roots. */
